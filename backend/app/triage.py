@@ -137,14 +137,30 @@ def apply_safety_policy(
         ]
 
     # --- Prescription guidance ---
+    def _rx_item_to_str(item) -> str:
+        """Convert a prescription item to a readable string regardless of shape."""
+        if isinstance(item, dict):
+            parts = [
+                item.get("medication", ""),
+                item.get("dose", ""),
+                item.get("route", ""),
+                item.get("frequency", ""),
+                f"for {item['duration']}" if item.get("duration") else "",
+                f"— {item['instruction']}" if item.get("instruction") else "",
+            ]
+            return " ".join(p for p in parts if p).strip()
+        return str(item).strip()
+
     rx_safe = []
-    for item in [str(c).strip() for c in raw.get("prescription_guidance", []) if str(c).strip()]:
+    for item in raw.get("prescription_guidance", []):
+        text = _rx_item_to_str(item)
+        if not text:
+            continue
         if not prescribing_enabled:
-            # Sanitize to "ask clinician" framing when prescribing is off
-            lower = item.lower()
+            lower = text.lower()
             if any(kw in lower for kw in ("you should take", "take ", "prescribed", "mg twice", "mg once", "mg daily", "mg by mouth")):
-                item = f"Ask a licensed clinician about: {item}"
-        rx_safe.append(item)
+                text = f"Ask a licensed clinician about: {text}"
+        rx_safe.append(text)
 
     # --- Specialist ---
     specialist = raw.get("specialist_type") or None

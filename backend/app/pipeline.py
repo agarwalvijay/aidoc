@@ -54,7 +54,7 @@ Return valid JSON only:
   "confidence_note": "what supports or limits confidence",
   "recommended_next_step": "specific, actionable instruction",
   "care_instructions": ["...", "..."],
-  "prescription_guidance": [],
+  "prescription_guidance": ["Drug name dose route frequency duration. Key instruction. When to stop/seek care."],
   "sensitive_condition": false,
   "specialist_type": null,
   "reasoning": "brief differential reasoning"
