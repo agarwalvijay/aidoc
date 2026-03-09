@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Doctor</title>
+    <style>
+      :root {
+        --bg: radial-gradient(circle at 20% 20%, #1d3557 0%, #0b132b 45%, #020617 100%);
+        --accent: #5bc0be;
+        --text: #e6f1ff;
+      }
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .screen {
+        min-height: 100%;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      .card {
+        width: min(760px, 100%);
+        padding: 24px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.07);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+      }
+      h1 { margin: 0 0 8px; font-size: clamp(30px, 5vw, 56px); }
+      p { margin: 6px 0; line-height: 1.4; }
+      .brand { color: var(--accent); font-weight: 600; }
+      .btn {
+        margin-top: 14px;
+        background: var(--accent);
+        border: 0;
+        color: #052b35;
+        font-weight: 700;
+        padding: 12px 16px;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .log {
+        margin-top: 16px;
+        max-height: 300px;
+        overflow: auto;
+        font-size: 0.95rem;
+        white-space: pre-wrap;
+      }
+      .pulse {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        background: #8bf3f0;
+        box-shadow: 0 0 0 0 rgba(139, 243, 240, 0.8);
+        animation: pulse 1.6s infinite;
+        vertical-align: middle;
+        margin-right: 8px;
+      }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(139, 243, 240, 0.8); }
+        70% { box-shadow: 0 0 0 18px rgba(139, 243, 240, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(139, 243, 240, 0); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="screen">
+      <section class="card">
+        <h1>AI Doctor</h1>
+        <p class="brand">Voice-first clinical triage assistant</p>
+        <p id="status">Press start to begin the welcome chime and voice intake.</p>
+        <button id="start" class="btn">Start Voice Session</button>
+        <div id="log" class="log"></div>
+      </section>
+    </main>
+
+    <script>
+      const API = "http://localhost:8000";
+      const startBtn = document.getElementById("start");
+      const statusEl = document.getElementById("status");
+      const logEl = document.getElementById("log");
+      let sessionId = null;
+      let recognizer = null;
+      let isSessionActive = false;
+      let isListening = false;
+      let isSpeaking = false;
+      let isProcessing = false;
+      let lastAssistantMessage = "";
+      let pendingListenTimer = null;
+
+      const addLog = (line) => {
+        logEl.textContent += `${line}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+      };
+
+      function speak(text) {
+        return new Promise((resolve) => {
+          if (!("speechSynthesis" in window)) {
+            resolve();
+            return;
+          }
+
+          speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(text);
+          u.rate = 1;
+          u.pitch = 1;
+          isSpeaking = true;
+          u.onend = () => {
+            isSpeaking = false;
+            resolve();
+          };
+          u.onerror = () => {
+            isSpeaking = false;
+            resolve();
+          };
+          speechSynthesis.speak(u);
+        });
+      }
+
+      function playChime() {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        osc.frequency.value = 660;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.7);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.72);
+      }
+
+      function clearPendingListen() {
+        if (pendingListenTimer) {
+          clearTimeout(pendingListenTimer);
+          pendingListenTimer = null;
+        }
+      }
+
+      function scheduleListening(delayMs = 600) {
+        clearPendingListen();
+        pendingListenTimer = setTimeout(() => {
+          startRecognition();
+        }, delayMs);
+      }
+
+      function normalizeText(text) {
+        return (text || "").toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+      }
+
+      function shouldDropAsEcho(transcript) {
+        const userText = normalizeText(transcript);
+        const aiText = normalizeText(lastAssistantMessage);
+        if (!userText || !aiText) return false;
+        if (userText.length < 6) return true;
+        if (aiText.includes(userText)) return true;
+        if (userText.includes(aiText.slice(0, Math.min(aiText.length, 30)))) return true;
+        return false;
+      }
+
+      async function submitUserTurn(transcript) {
+        if (!isSessionActive || isProcessing) return;
+        isProcessing = true;
+        statusEl.textContent = "Processing...";
+
+        try {
+          const response = await fetch(`${API}/api/session/${sessionId}/turn`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript })
+          }).then((x) => x.json());
+
+          lastAssistantMessage = response.assistant_message || "";
+          addLog(`AI Doctor: ${lastAssistantMessage}`);
+          await speak(lastAssistantMessage);
+
+          if (response.ask_follow_up) {
+            scheduleListening(450);
+          } else {
+            isSessionActive = false;
+            startBtn.disabled = false;
+            startBtn.textContent = "Start Voice Session";
+            statusEl.textContent = "Session complete. Press Start to begin another.";
+          }
+        } catch (err) {
+          statusEl.textContent = "Network error while processing. Try again.";
+        } finally {
+          isProcessing = false;
+        }
+      }
+
+      function stopRecognition() {
+        if (recognizer && isListening) {
+          try {
+            recognizer.stop();
+          } catch (_) {}
+        }
+        isListening = false;
+      }
+
+      function startRecognition() {
+        if (!isSessionActive || isListening || isSpeaking || isProcessing) return;
+
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+          statusEl.textContent = "Speech recognition not available in this browser.";
+          return;
+        }
+
+        recognizer = new SR();
+        recognizer.lang = "en-US";
+        recognizer.interimResults = false;
+        recognizer.maxAlternatives = 1;
+        recognizer.continuous = false;
+
+        statusEl.innerHTML = '<span class="pulse"></span>Listening...';
+        isListening = true;
+        recognizer.start();
+
+        recognizer.onresult = async (event) => {
+          isListening = false;
+          const transcript = event.results[0][0].transcript;
+          if (shouldDropAsEcho(transcript)) {
+            scheduleListening(350);
+            return;
+          }
+          addLog(`You: ${transcript}`);
+          await submitUserTurn(transcript);
+        };
+
+        recognizer.onerror = () => {
+          isListening = false;
+          if (isSessionActive && !isSpeaking && !isProcessing) {
+            statusEl.textContent = "Could not capture speech. Listening again...";
+            scheduleListening(500);
+          }
+        };
+
+        recognizer.onend = () => {
+          isListening = false;
+        };
+      }
+
+      startBtn.onclick = async () => {
+        if (isSessionActive) return;
+        clearPendingListen();
+        stopRecognition();
+        speechSynthesis.cancel();
+
+        startBtn.disabled = true;
+        startBtn.textContent = "Session Running...";
+        isSessionActive = true;
+
+        const start = await fetch(`${API}/api/session/start`, { method: "POST" }).then((x) => x.json());
+        sessionId = start.session_id;
+        logEl.textContent = "";
+
+        playChime();
+        const opening = `${start.welcome_message} ${start.first_question}`;
+        lastAssistantMessage = opening;
+        addLog(`AI Doctor: ${opening}`);
+        await speak(opening);
+
+        scheduleListening(300);
+      };
+    </script>
+  </body>
+</html>
