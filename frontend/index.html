@@ -751,7 +751,8 @@
     </main>
 
     <script>
-      const API = "http://localhost:8000";
+      // Local dev → talk directly to uvicorn; production → same-origin via nginx
+      const API = window.location.hostname === "localhost" ? "http://localhost:8000" : "";
 
       // ── Screen references ──
       const homeScreen    = document.getElementById("homeScreen");
