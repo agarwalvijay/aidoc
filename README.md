@@ -1,27 +1,45 @@
-# AI Doctor (Voice-First Triage Scaffold)
+# AI Doctor — Primary Care Triage Assistant
 
-Fresh, ground-up starter for a safety-first AI Doctor workflow. This is intentionally **not** TI-project code reuse.
+A safety-first AI Doctor that identifies common primary care presentations and escalates high-risk situations, reducing load on the medical system.
 
-## Product Positioning
-- Focus: triage and routing, not definitive diagnosis
-- Output: likely conditions, urgency level, and safe next step
-- Safety posture: avoid false non-follow-up on high-risk conditions
+**This is a technical scaffold — not a medical device. Clinical, legal, and operational validation is required before any patient use.**
 
-## Current Architecture
-- `backend/app/red_flags.py`
-  - Deterministic red-flag detection for emergency/cancer-risk signals
-- `backend/app/triage.py`
-  - Conservative risk adjudication policy
-- `backend/app/intake.py`
-  - Follow-up question sequencer
-- `backend/app/main.py`
-  - FastAPI endpoints for start session + voice turn processing
-- `frontend/index.html`
-  - Full-screen voice-first shell with chime, TTS, browser STT
+## Architecture
+
+```
+Patient Onboarding (demographics, PMH, meds, allergies, chief complaint)
+    │
+    ▼
+POST /api/session/start  →  personalized welcome + condition-specific first question
+    │
+    ▼
+POST /api/session/{id}/turn  (repeats until assessment)
+    │
+    ├── Deterministic red-flag gate (red_flags.py) — bypasses LLM, immediate emergency response
+    │
+    └── LLM-driven intake + triage (llm.py)
+            │
+            ├── action: ask_question  →  condition-specific follow-up (3-7 turns)
+            │
+            └── action: assess  →  safety policy layer (triage.py)  →  TriageAssessment
+```
+
+**LLM is the primary clinical engine.** It receives the full patient profile and conversation history and decides what to ask next or when to assess. The deterministic layer only handles red flags and output policy enforcement (no direct prescribing, urgency floors, etc.).
+
+## Target Conditions
+URI, pharyngitis/strep, otitis media, sinusitis, GI illness, UTI/cystitis, skin rashes, acute back pain, tension/migraine headache, anxiety/depression (PHQ-style), HTN follow-up, DM follow-up.
+
+## Key Files
+- `backend/app/llm.py` — comprehensive clinical system prompt + `process_turn()` interface
+- `backend/app/red_flags.py` — deterministic safety gate
+- `backend/app/triage.py` — safety policy: builds emergency assessments, sanitizes LLM output
+- `backend/app/main.py` — FastAPI routes (simplified — minimal business logic)
+- `backend/app/models.py` — `PatientProfile`, `TriageAssessment`, session models
+- `frontend/index.html` — 3-screen app: Welcome → Onboarding form → Voice/text consultation
 
 ## API Endpoints
-- `POST /api/session/start`
-- `POST /api/session/{session_id}/turn`
+- `POST /api/session/start` — body: `{ "patient_profile": { ... } }`
+- `POST /api/session/{session_id}/turn` — body: `{ "transcript": "..." }`
 - `GET /api/health`
 
 ## Local Run
@@ -32,42 +50,30 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-# Create env config from template
 cp .env.example .env
-# Edit .env and set LLM_PROVIDER + matching API key
+# Set LLM_PROVIDER and the matching API key in .env
 uvicorn app.main:app --reload
 ```
 
 ### Frontend
-Serve `frontend/index.html` with any static server, e.g.:
 ```bash
 cd frontend
 python3 -m http.server 3000
 ```
 Then open `http://localhost:3000`.
 
-## Important Safety Note
-This scaffold is a technical starting point and not a medical device. It must be validated clinically, legally, and operationally before real patient use.
+## LLM Provider Configuration (`backend/.env`)
 
-## LLM Provider Configuration
-Set these in `backend/.env`:
+Recommended: **Anthropic Claude** (best clinical reasoning, reliable JSON output)
+```
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-4-6
+```
 
-- `LLM_ENABLED=true|false`
-- `LLM_PROVIDER=openai|deepseek|groq|google`
+Other supported providers: `openai`, `deepseek`, `groq`, `google` — see `.env.example` for keys.
 
-Provider-specific keys/models:
-- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL`
-- DeepSeek: `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, `DEEPSEEK_BASE_URL`
-- Groq: `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_BASE_URL`
-- Google: `GOOGLE_API_KEY`, `GOOGLE_MODEL`
-
-The API health endpoint reports LLM status:
-- `GET /api/health`
-
-## Debugging LLM Triage
-- Finalized turns now emit `LLM_TRIAGE_DEBUG` logs in the backend console.
-- The log includes:
-  - full transcript context,
-  - parsed LLM enhancement JSON,
-  - final assessment payload,
-  - final assistant message.
+## Safety Configuration
+- `CONSERVATIVE_MODE=true` — floors uncertain (low-confidence) cases at `specialist_soon` instead of `self_care_monitor`
+- `MIN_TURNS_BEFORE_ASSESSMENT=3` — LLM won't be forced to assess before this many turns
+- `MAX_TURNS_BEFORE_ASSESSMENT=7` — hard cap; LLM is instructed to assess at this point

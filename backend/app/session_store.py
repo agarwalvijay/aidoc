@@ -1,15 +1,16 @@
 from uuid import uuid4
 from typing import Optional
-from .models import SessionState
+
+from .models import PatientProfile, SessionState
 
 
 class SessionStore:
     def __init__(self) -> None:
         self._sessions: dict[str, SessionState] = {}
 
-    def create(self) -> SessionState:
+    def create_with_profile(self, profile: PatientProfile) -> SessionState:
         session_id = str(uuid4())
-        session = SessionState(session_id=session_id)
+        session = SessionState(session_id=session_id, patient_profile=profile)
         self._sessions[session_id] = session
         return session
 

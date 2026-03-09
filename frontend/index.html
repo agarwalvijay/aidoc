@@ -3,276 +3,1386 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Doctor</title>
+    <title>AI Doctor Kiosk</title>
     <style>
       :root {
-        --bg: radial-gradient(circle at 20% 20%, #1d3557 0%, #0b132b 45%, #020617 100%);
-        --accent: #5bc0be;
-        --text: #e6f1ff;
+        --bg-a: #060b18;
+        --bg-b: #0e1f3b;
+        --accent: #65d1c4;
+        --accent-2: #8ad0ff;
+        --text: #ecf5ff;
+        --glass: rgba(255, 255, 255, 0.07);
+        --glass-border: rgba(255, 255, 255, 0.14);
+        --input-bg: rgba(10, 22, 48, 0.7);
       }
+
+      *, *::before, *::after { box-sizing: border-box; }
+
       html, body {
         margin: 0;
         width: 100%;
-        height: 100%;
-        font-family: "Avenir Next", "Segoe UI", sans-serif;
-        background: var(--bg);
-        color: var(--text);
-      }
-      .screen {
         min-height: 100%;
-        display: grid;
+        font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 20% 20%, #1f3d72 0%, transparent 45%),
+          radial-gradient(circle at 80% 75%, #13315e 0%, transparent 48%),
+          linear-gradient(145deg, var(--bg-a), var(--bg-b));
+      }
+
+      /* ── Screens ── */
+      .screen {
+        min-height: 100vh;
+        display: none;
         place-items: center;
-        padding: 24px;
-        box-sizing: border-box;
+        padding: 24px 16px;
       }
-      .card {
-        width: min(760px, 100%);
-        padding: 24px;
-        border-radius: 18px;
-        background: rgba(255, 255, 255, 0.07);
-        backdrop-filter: blur(10px);
-        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+      .screen.active { display: grid; }
+
+      .panel {
+        width: min(860px, 100%);
+        border-radius: 22px;
+        background: var(--glass);
+        backdrop-filter: blur(16px);
+        border: 1px solid var(--glass-border);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+        padding: clamp(20px, 4vw, 40px);
       }
-      h1 { margin: 0 0 8px; font-size: clamp(30px, 5vw, 56px); }
-      p { margin: 6px 0; line-height: 1.4; }
-      .brand { color: var(--accent); font-weight: 600; }
-      .btn {
-        margin-top: 14px;
-        background: var(--accent);
-        border: 0;
-        color: #052b35;
-        font-weight: 700;
-        padding: 12px 16px;
-        border-radius: 10px;
-        cursor: pointer;
+
+      /* ── Home screen ── */
+      .home-title {
+        margin: 0;
+        font-size: clamp(40px, 7vw, 88px);
+        letter-spacing: 0.02em;
       }
-      .log {
-        margin-top: 16px;
-        max-height: 300px;
-        overflow: auto;
+      .home-subtitle {
+        margin: 8px 0 28px;
+        color: #b9d8f7;
+        font-size: clamp(16px, 2.2vw, 22px);
+      }
+      .home-desc {
+        color: #8ab8d8;
         font-size: 0.95rem;
-        white-space: pre-wrap;
+        line-height: 1.6;
+        max-width: 540px;
+        margin: 0 0 32px;
+      }
+      .btn-primary {
+        border: 0;
+        border-radius: 999px;
+        padding: 18px 44px;
+        font-size: clamp(20px, 3.6vw, 38px);
+        font-weight: 800;
+        color: #06141e;
+        background: linear-gradient(130deg, var(--accent), var(--accent-2));
+        cursor: pointer;
+        box-shadow: 0 12px 32px rgba(101, 209, 196, 0.3);
+        transition: opacity 0.15s;
+      }
+      .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+      .btn-primary:hover:not(:disabled) { opacity: 0.9; }
+
+      /* ── Onboarding form screen ── */
+      .onboard-title {
+        margin: 0 0 4px;
+        font-size: clamp(22px, 3.5vw, 34px);
+        font-weight: 700;
+      }
+      .onboard-subtitle {
+        color: #8ab8d8;
+        margin: 0 0 28px;
+        font-size: 0.95rem;
+      }
+      .form-section { margin-bottom: 28px; }
+      .form-section-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin: 0 0 14px;
+      }
+      .form-row {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex: 1;
+        min-width: 140px;
+      }
+      label {
+        font-size: 0.82rem;
+        color: #9fc8e8;
+        font-weight: 500;
+      }
+      input[type="text"],
+      input[type="number"],
+      select,
+      textarea {
+        background: var(--input-bg);
+        border: 1px solid rgba(100, 160, 210, 0.28);
+        border-radius: 10px;
+        color: var(--text);
+        padding: 10px 13px;
+        font-size: 0.95rem;
+        font-family: inherit;
+        outline: none;
+        transition: border-color 0.15s;
+        width: 100%;
+      }
+      input[type="text"]:focus,
+      input[type="number"]:focus,
+      select:focus,
+      textarea:focus { border-color: var(--accent); }
+      select option { background: #0e1f3b; }
+      textarea { resize: vertical; min-height: 72px; }
+
+      /* PMH checkboxes */
+      .checkbox-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        gap: 8px;
+      }
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        background: var(--input-bg);
+        border: 1px solid rgba(100, 160, 210, 0.2);
+        border-radius: 9px;
+        padding: 9px 12px;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+        font-size: 0.88rem;
+      }
+      .checkbox-item:hover { border-color: var(--accent); }
+      .checkbox-item input[type="checkbox"] {
+        width: 16px; height: 16px;
+        accent-color: var(--accent);
+        flex-shrink: 0;
+      }
+      #pregnantRow { display: none; }
+      .required-marker { color: #ff7070; }
+
+      .btn-submit {
+        width: 100%;
+        border: 0;
+        border-radius: 14px;
+        padding: 16px;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #06141e;
+        background: linear-gradient(130deg, var(--accent), var(--accent-2));
+        cursor: pointer;
+        margin-top: 8px;
+        transition: opacity 0.15s;
+      }
+      .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+      .btn-submit:hover:not(:disabled) { opacity: 0.9; }
+      .form-error {
+        color: #ff7070;
+        font-size: 0.82rem;
+        margin-top: 6px;
+        display: none;
+      }
+
+      /* ── Session screen ── */
+      .session-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .session-header h2 { margin: 0; font-size: clamp(24px, 3.5vw, 38px); }
+      .btn-small {
+        border: 0;
+        border-radius: 10px;
+        padding: 9px 14px;
+        background: rgba(40, 70, 115, 0.8);
+        color: #dcecff;
+        cursor: pointer;
+        font-size: 0.82rem;
+        white-space: nowrap;
+        transition: background 0.15s;
+      }
+      .btn-small:hover { background: rgba(60, 100, 160, 0.9); }
+
+      #statusBar {
+        font-size: 0.95rem;
+        color: #c8e8ff;
+        margin-bottom: 8px;
+        min-height: 22px;
       }
       .pulse {
-        width: 12px;
-        height: 12px;
+        width: 10px; height: 10px;
         border-radius: 50%;
         display: inline-block;
-        background: #8bf3f0;
-        box-shadow: 0 0 0 0 rgba(139, 243, 240, 0.8);
-        animation: pulse 1.6s infinite;
+        background: #9ef7ed;
+        box-shadow: 0 0 0 0 rgba(158, 247, 237, 0.8);
+        animation: pulse 1.4s infinite;
         vertical-align: middle;
-        margin-right: 8px;
+        margin-right: 7px;
       }
       @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(139, 243, 240, 0.8); }
-        70% { box-shadow: 0 0 0 18px rgba(139, 243, 240, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(139, 243, 240, 0); }
+        0%   { box-shadow: 0 0 0 0 rgba(158, 247, 237, 0.8); }
+        70%  { box-shadow: 0 0 0 14px rgba(158, 247, 237, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(158, 247, 237, 0); }
+      }
+
+      #conversationLog {
+        background: rgba(8, 18, 34, 0.55);
+        border: 1px solid rgba(146, 195, 236, 0.15);
+        border-radius: 14px;
+        padding: 14px 16px;
+        max-height: min(38vh, 360px);
+        overflow-y: auto;
+        font-size: 0.9rem;
+        line-height: 1.55;
+        margin-bottom: 12px;
+      }
+      .log-line { margin-bottom: 8px; }
+      .log-line.ai  { color: #9edfff; }
+      .log-line.you { color: #d4f5e9; }
+      .log-label { font-weight: 700; margin-right: 4px; font-size: 0.78rem; letter-spacing: 0.04em; }
+      .log-line.ai  .log-label { color: var(--accent); }
+      .log-line.you .log-label { color: #65e8b4; }
+
+      /* Text input fallback */
+      .text-input-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      #textInput {
+        flex: 1;
+        border-radius: 12px;
+        padding: 11px 14px;
+        font-size: 0.95rem;
+      }
+      #textSendBtn {
+        border: 0;
+        border-radius: 12px;
+        padding: 11px 20px;
+        background: rgba(50, 100, 160, 0.9);
+        color: white;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.9rem;
+        white-space: nowrap;
+      }
+      #textSendBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+      .input-mode-toggle {
+        font-size: 0.78rem;
+        color: #7aaacc;
+        cursor: pointer;
+        text-decoration: underline;
+        margin-bottom: 10px;
+        display: inline-block;
+      }
+
+      /* ── Progress panel ── */
+      #progressPanel {
+        display: none;
+        background: rgba(8, 20, 44, 0.7);
+        border: 1px solid rgba(100, 180, 230, 0.18);
+        border-radius: 16px;
+        padding: 18px 20px;
+        margin-bottom: 12px;
+      }
+      #progressPanel.visible { display: block; }
+      .progress-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 14px;
+      }
+      .progress-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      .progress-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        position: relative;
+        padding-bottom: 14px;
+      }
+      .progress-step:last-child { padding-bottom: 0; }
+      /* Connector line */
+      .progress-step:not(:last-child)::before {
+        content: "";
+        position: absolute;
+        left: 10px;
+        top: 22px;
+        bottom: 0;
+        width: 2px;
+        background: rgba(100, 180, 230, 0.15);
+      }
+      .progress-step:not(:last-child).step-done::before,
+      .progress-step:not(:last-child).step-active::before {
+        background: rgba(101, 209, 196, 0.3);
+      }
+      .step-icon {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 1px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        transition: all 0.3s ease;
+      }
+      .step-icon.pending {
+        border: 2px solid rgba(100, 160, 210, 0.25);
+        background: transparent;
+      }
+      .step-icon.active {
+        border: 2px solid var(--accent);
+        background: transparent;
+        animation: spin-ring 1s linear infinite;
+      }
+      .step-icon.done {
+        border: 2px solid var(--accent);
+        background: var(--accent);
+        color: #06141e;
+        font-weight: 900;
+        animation: none;
+      }
+      @keyframes spin-ring {
+        0%   { border-top-color: var(--accent); border-right-color: transparent; border-bottom-color: transparent; border-left-color: transparent; transform: rotate(0deg); }
+        25%  { border-right-color: var(--accent); border-bottom-color: transparent; border-left-color: transparent; }
+        50%  { border-bottom-color: var(--accent); border-left-color: transparent; }
+        75%  { border-left-color: var(--accent); }
+        100% { transform: rotate(360deg); }
+      }
+      .step-text { padding-top: 2px; }
+      .step-label {
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #b0cce8;
+        transition: color 0.3s;
+      }
+      .progress-step.step-active .step-label { color: #e8f4ff; font-weight: 600; }
+      .progress-step.step-done  .step-label { color: var(--accent); }
+      .step-sublabel {
+        font-size: 0.76rem;
+        color: #5a7a99;
+        margin-top: 2px;
+      }
+      .progress-step.step-active .step-sublabel { color: #7aaacc; }
+      .progress-step.step-done  .step-sublabel { color: #4a9a88; }
+
+      /* ── Assessment panel ── */
+      #assessmentPanel {
+        display: none;
+        margin-top: 16px;
+        border-radius: 16px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      #assessmentPanel.visible { display: block; }
+
+      .urgency-header {
+        padding: 14px 18px;
+        font-weight: 800;
+        font-size: 1.05rem;
+        letter-spacing: 0.04em;
+        text-align: center;
+      }
+      .urgency-emergency { background: #8b0000; color: #ffdddd; }
+      .urgency-urgent    { background: #7a3800; color: #ffe5c0; }
+      .urgency-soon      { background: #5a4a00; color: #fff4b0; }
+      .urgency-monitor   { background: #0a3d22; color: #b8f5d0; }
+
+      .assessment-body {
+        background: rgba(8, 18, 40, 0.75);
+        padding: 16px 18px;
+      }
+      .assessment-section { margin-bottom: 14px; }
+      .assessment-section:last-child { margin-bottom: 0; }
+      .assessment-section-title {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #6ab0d4;
+        margin-bottom: 6px;
+      }
+      .condition-pills { display: flex; flex-wrap: wrap; gap: 7px; }
+      .condition-pill {
+        background: rgba(40, 80, 140, 0.6);
+        border: 1px solid rgba(100, 170, 230, 0.3);
+        border-radius: 999px;
+        padding: 4px 13px;
+        font-size: 0.83rem;
+      }
+      .next-step-box {
+        background: rgba(30, 60, 110, 0.5);
+        border-left: 3px solid var(--accent-2);
+        border-radius: 0 8px 8px 0;
+        padding: 10px 14px;
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+      .care-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .care-list li {
+        font-size: 0.86rem;
+        padding-left: 18px;
+        position: relative;
+        line-height: 1.5;
+        color: #cce4ff;
+      }
+      .care-list li::before {
+        content: "•";
+        position: absolute;
+        left: 4px;
+        color: var(--accent);
+      }
+
+      /* ── Launch overlay ── */
+      .launch-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        z-index: 99;
+        background: radial-gradient(circle at center, #0d1a33 0%, #02040a 70%);
+        overflow: hidden;
+      }
+      .launch-overlay.active { display: grid; }
+      .launch-logo {
+        font-size: clamp(100px, 22vw, 260px);
+        font-weight: 900;
+        color: #eff7ff;
+        transform: scale(0.25);
+        opacity: 0;
+        animation: logoIn 2.2s ease-out forwards;
+        text-shadow: 0 8px 34px rgba(170, 220, 255, 0.3);
+        z-index: 2;
+      }
+      .launch-sweep {
+        position: absolute;
+        width: 26vmax;
+        height: 200vmax;
+        transform: rotate(25deg) translateX(-180%);
+        background: linear-gradient(90deg, transparent, rgba(162, 223, 255, 0.8), transparent);
+        filter: blur(4px);
+        animation: sweep 2.2s ease-out forwards;
+      }
+      @keyframes logoIn {
+        0%   { transform: scale(0.25); opacity: 0; }
+        32%  { transform: scale(1.08); opacity: 1; }
+        65%  { transform: scale(0.98); opacity: 1; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      @keyframes sweep {
+        0%   { transform: rotate(25deg) translateX(-180%); }
+        100% { transform: rotate(25deg) translateX(190%); }
+      }
+
+      /* ── Voice indicator badge ── */
+      #voiceBadge {
+        display: inline-block;
+        font-size: 0.7rem;
+        color: #5a8aaa;
+        padding: 2px 8px;
+        border: 1px solid rgba(90, 138, 170, 0.3);
+        border-radius: 999px;
+        margin-left: 8px;
+        vertical-align: middle;
       }
     </style>
   </head>
   <body>
-    <main class="screen">
-      <section class="card">
-        <h1>AI Doctor</h1>
-        <p class="brand">Voice-first clinical triage assistant</p>
-        <p id="status">Press start to begin the welcome chime and voice intake.</p>
-        <button id="start" class="btn">Start Voice Session</button>
-        <div id="log" class="log"></div>
+
+    <!-- Launch overlay -->
+    <div id="launchOverlay" class="launch-overlay" aria-hidden="true">
+      <div class="launch-sweep"></div>
+      <div class="launch-logo">A</div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- Screen 1: Home                                -->
+    <!-- ══════════════════════════════════════════════ -->
+    <main id="homeScreen" class="screen active">
+      <section class="panel">
+        <h1 class="home-title">Welcome</h1>
+        <p class="home-subtitle">AI Doctor — Primary Care Triage Assistant</p>
+        <p class="home-desc">
+          This tool helps assess your symptoms and guides you toward the right level of care.
+          It is not a replacement for a physician. In an emergency, call 911.
+        </p>
+        <button id="startBtn" class="btn-primary">Get Started</button>
+      </section>
+    </main>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- Screen 2: Onboarding form                     -->
+    <!-- ══════════════════════════════════════════════ -->
+    <main id="onboardScreen" class="screen">
+      <section class="panel">
+        <h2 class="onboard-title">Before we begin</h2>
+        <p class="onboard-subtitle">
+          This information helps personalize your assessment. Fields marked
+          <span class="required-marker">*</span> are required.
+        </p>
+
+        <form id="onboardForm" novalidate>
+
+          <!-- Demographics -->
+          <div class="form-section">
+            <div class="form-section-title">About You</div>
+            <div class="form-row">
+              <div class="form-group" style="min-width:180px;">
+                <label for="fieldName">First name <span style="color:#7aaacc">(optional)</span></label>
+                <input type="text" id="fieldName" placeholder="e.g. Alex" autocomplete="given-name" />
+              </div>
+              <div class="form-group" style="max-width:120px;">
+                <label for="fieldAge">Age <span class="required-marker">*</span></label>
+                <input type="number" id="fieldAge" min="0" max="120" placeholder="e.g. 45" />
+              </div>
+              <div class="form-group">
+                <label for="fieldSex">Sex <span class="required-marker">*</span></label>
+                <select id="fieldSex">
+                  <option value="">— select —</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other / Non-binary</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row" id="pregnantRow">
+              <div class="form-group">
+                <label for="fieldPregnant">Are you currently pregnant?</label>
+                <select id="fieldPregnant">
+                  <option value="">— select —</option>
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                  <option value="unknown">Not sure</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chief complaint -->
+          <div class="form-section">
+            <div class="form-section-title">Today's Visit</div>
+            <div class="form-group">
+              <label for="fieldCC">What is your main concern today? <span style="color:#7aaacc">(optional)</span></label>
+              <textarea id="fieldCC" rows="2" placeholder="e.g. I've had a sore throat and fever for 2 days..."></textarea>
+            </div>
+          </div>
+
+          <!-- PMH -->
+          <div class="form-section">
+            <div class="form-section-title">Medical History — check all that apply</div>
+            <div class="checkbox-grid">
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Type 2 Diabetes"> Type 2 Diabetes</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Type 1 Diabetes"> Type 1 Diabetes</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Hypertension"> Hypertension (High BP)</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Heart Disease"> Heart Disease</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Asthma"> Asthma</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="COPD"> COPD</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Cancer"> Cancer (active or history)</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Chronic Kidney Disease"> Chronic Kidney Disease</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Thyroid Disease"> Thyroid Disease</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Depression"> Depression</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Anxiety"> Anxiety</label>
+              <label class="checkbox-item"><input type="checkbox" name="pmh" value="Stroke"> Prior Stroke</label>
+            </div>
+          </div>
+
+          <!-- Vitals -->
+          <div class="form-section">
+            <div class="form-section-title">Current Vitals <span style="color:#7aaacc;font-weight:400;text-transform:none;letter-spacing:0">(all optional)</span></div>
+            <div class="form-row">
+              <div class="form-group" style="max-width:160px;">
+                <label for="fieldTemp">Temperature</label>
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <input type="number" id="fieldTemp" min="88" max="110" step="0.1" placeholder="e.g. 101.2" style="flex:1;" />
+                  <span style="color:#9fc8e8;font-size:0.85rem;white-space:nowrap;">°F</span>
+                </div>
+              </div>
+              <div class="form-group" style="max-width:210px;">
+                <label>Blood Pressure</label>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" id="fieldSystolic" min="60" max="280" placeholder="120" style="flex:1;" title="Systolic" />
+                  <span style="color:#9fc8e8;font-weight:700;">/</span>
+                  <input type="number" id="fieldDiastolic" min="30" max="160" placeholder="80" style="flex:1;" title="Diastolic" />
+                  <span style="color:#9fc8e8;font-size:0.85rem;white-space:nowrap;">mmHg</span>
+                </div>
+              </div>
+              <div class="form-group" style="max-width:140px;">
+                <label for="fieldHR">Heart Rate</label>
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <input type="number" id="fieldHR" min="20" max="300" placeholder="e.g. 82" style="flex:1;" />
+                  <span style="color:#9fc8e8;font-size:0.85rem;white-space:nowrap;">bpm</span>
+                </div>
+              </div>
+              <div class="form-group" style="max-width:130px;">
+                <label for="fieldSpO2">Oxygen Sat.</label>
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <input type="number" id="fieldSpO2" min="50" max="100" placeholder="e.g. 98" style="flex:1;" />
+                  <span style="color:#9fc8e8;font-size:0.85rem;">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Medications and allergies -->
+          <div class="form-section">
+            <div class="form-section-title">Medications &amp; Allergies</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="fieldMeds">Current medications <span style="color:#7aaacc">(list each, or "None")</span></label>
+                <textarea id="fieldMeds" rows="2" placeholder="e.g. Metformin 500mg, Lisinopril 10mg"></textarea>
+              </div>
+              <div class="form-group">
+                <label for="fieldAllergies">Drug allergies <span style="color:#7aaacc">(or "None")</span></label>
+                <textarea id="fieldAllergies" rows="2" placeholder="e.g. Penicillin (rash), Sulfa drugs"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div id="formError" class="form-error">Please fill in the required fields (Age and Sex).</div>
+          <button type="submit" class="btn-submit" id="beginBtn">Begin Consultation</button>
+        </form>
+      </section>
+    </main>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- Screen 3: Consultation session                -->
+    <!-- ══════════════════════════════════════════════ -->
+    <main id="sessionScreen" class="screen">
+      <section class="panel">
+        <div class="session-header">
+          <h2>AI Doctor <span id="voiceBadge"></span></h2>
+          <button id="newSessionBtn" class="btn-small">New Session</button>
+        </div>
+
+        <div id="statusBar">Connecting...</div>
+        <div id="conversationLog"></div>
+
+        <!-- Text input (shown when voice is unavailable or toggled) -->
+        <span id="modeToggle" class="input-mode-toggle" style="display:none;">Switch to voice input</span>
+        <div class="text-input-row" id="textInputRow" style="display:none;">
+          <input type="text" id="textInput" placeholder="Type your response here..." autocomplete="off" />
+          <button id="textSendBtn">Send</button>
+        </div>
+
+        <!-- Analysis progress panel -->
+        <div id="progressPanel">
+          <div class="progress-title">AI Doctor is analyzing your case</div>
+          <div class="progress-steps" id="progressSteps">
+            <div class="progress-step" id="step-thinking">
+              <div class="step-icon pending" id="icon-thinking"></div>
+              <div class="step-text">
+                <div class="step-label">Reviewing your responses</div>
+                <div class="step-sublabel">Parsing intake information</div>
+              </div>
+            </div>
+            <div class="progress-step" id="step-assessing">
+              <div class="step-icon pending" id="icon-assessing"></div>
+              <div class="step-text">
+                <div class="step-label">Clinical assessment</div>
+                <div class="step-sublabel">Differential diagnosis &amp; urgency</div>
+              </div>
+            </div>
+            <div class="progress-step" id="step-critic">
+              <div class="step-icon pending" id="icon-critic"></div>
+              <div class="step-text">
+                <div class="step-label">Safety review</div>
+                <div class="step-sublabel">Checking for missed red flags &amp; drug safety</div>
+              </div>
+            </div>
+            <div class="progress-step" id="step-writing">
+              <div class="step-icon pending" id="icon-writing"></div>
+              <div class="step-text">
+                <div class="step-label">Drafting your summary</div>
+                <div class="step-sublabel">Plain-language response</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Assessment result panel -->
+        <div id="assessmentPanel">
+          <div id="urgencyHeader" class="urgency-header"></div>
+          <div class="assessment-body">
+            <div class="assessment-section" id="conditionsSection" style="display:none;">
+              <div class="assessment-section-title">Possible Conditions</div>
+              <div class="condition-pills" id="conditionPills"></div>
+            </div>
+            <div class="assessment-section">
+              <div class="assessment-section-title">Recommended Next Step</div>
+              <div class="next-step-box" id="nextStepBox"></div>
+            </div>
+            <div class="assessment-section" id="careSection" style="display:none;">
+              <div class="assessment-section-title">Care &amp; Watch-outs</div>
+              <ul class="care-list" id="careList"></ul>
+            </div>
+            <div class="assessment-section" id="rxSection" style="display:none;">
+              <div class="assessment-section-title">Medication Guidance (confirm with your clinician)</div>
+              <ul class="care-list" id="rxList"></ul>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 
     <script>
       const API = "http://localhost:8000";
-      const startBtn = document.getElementById("start");
-      const statusEl = document.getElementById("status");
-      const logEl = document.getElementById("log");
-      let sessionId = null;
-      let recognizer = null;
+
+      // ── Screen references ──
+      const homeScreen    = document.getElementById("homeScreen");
+      const onboardScreen = document.getElementById("onboardScreen");
+      const sessionScreen = document.getElementById("sessionScreen");
+      const launchOverlay = document.getElementById("launchOverlay");
+
+      // ── Session state ──
+      let sessionId       = null;
       let isSessionActive = false;
-      let isListening = false;
-      let isSpeaking = false;
-      let isProcessing = false;
-      let lastAssistantMessage = "";
-      let pendingListenTimer = null;
+      let isListening     = false;
+      let isSpeaking      = false;
+      let isProcessing    = false;
+      let useTextMode     = false;
+      let recognizer      = null;
+      let pendingTimer    = null;
+      let preferredVoice  = null;
+      let lastAiText      = "";
+      let heardResult     = false;
 
-      const addLog = (line) => {
-        logEl.textContent += `${line}\n`;
-        logEl.scrollTop = logEl.scrollHeight;
-      };
+      // ── TTS state ──
+      // null = unknown, true = available, false = not available
+      let backendTtsAvailable = null;
 
-      function speak(text) {
-        return new Promise((resolve) => {
-          if (!("speechSynthesis" in window)) {
-            resolve();
-            return;
+      // ── Helpers ──
+      function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+      function clearPending() {
+        if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+      }
+
+      function scheduleListen(ms = 600) {
+        clearPending();
+        pendingTimer = setTimeout(startRecognition, ms);
+      }
+
+      function setStatus(html) {
+        document.getElementById("statusBar").innerHTML = html;
+      }
+
+      function addLog(role, text) {
+        const log = document.getElementById("conversationLog");
+        const div = document.createElement("div");
+        div.className = "log-line " + (role === "ai" ? "ai" : "you");
+        const label = document.createElement("span");
+        label.className = "log-label";
+        label.textContent = role === "ai" ? "AI Doctor:" : "You:";
+        div.appendChild(label);
+        div.appendChild(document.createTextNode(" " + text));
+        log.appendChild(div);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      // ── Voice selection: prefer neural / premium voices ──
+      function refreshVoices() {
+        if (!("speechSynthesis" in window)) return;
+        const voices = speechSynthesis.getVoices() || [];
+
+        // Priority tiers: higher index = lower priority
+        const tiers = [
+          // Tier 1: cloud neural / enhanced voices (best quality)
+          v => v.lang.startsWith("en") && /online|natural|enhanced|premium|neural/i.test(v.name),
+          // Tier 2: known good named voices
+          v => v.lang.startsWith("en") && ["Samantha", "Ava", "Allison", "Serena",
+               "Microsoft Aria", "Microsoft Jenny", "Microsoft Zira",
+               "Google US English"].some(n => v.name.includes(n)),
+          // Tier 3: any en-US
+          v => v.lang === "en-US",
+          // Tier 4: any English
+          v => v.lang.startsWith("en"),
+        ];
+
+        for (const tier of tiers) {
+          const match = voices.find(tier);
+          if (match) { preferredVoice = match; break; }
+        }
+
+        // Update badge
+        const badge = document.getElementById("voiceBadge");
+        if (backendTtsAvailable) {
+          badge.textContent = "OpenAI voice";
+        } else if (preferredVoice) {
+          const isNeural = /online|natural|enhanced|premium|neural/i.test(preferredVoice.name);
+          badge.textContent = isNeural ? "neural voice" : preferredVoice.name.split(" ").slice(0,2).join(" ");
+        }
+      }
+
+      if ("speechSynthesis" in window) {
+        speechSynthesis.onvoiceschanged = refreshVoices;
+        refreshVoices();
+      }
+
+      // ── Backend TTS probe ──
+      async function probeBackendTts() {
+        try {
+          const r = await fetch(`${API}/api/tts`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: " " }),
+          });
+          backendTtsAvailable = r.ok;
+        } catch (_) {
+          backendTtsAvailable = false;
+        }
+        refreshVoices();
+      }
+
+      // ── Speak: backend TTS (OpenAI) or Web Speech fallback ──
+      async function speak(text) {
+        if (!text) return;
+
+        // Try backend TTS if available
+        if (backendTtsAvailable) {
+          try {
+            const r = await fetch(`${API}/api/tts`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text }),
+            });
+            if (r.ok) {
+              const blob = await r.blob();
+              const url  = URL.createObjectURL(blob);
+              await playAudioBlob(url, text.length);
+              return;
+            }
+            // If it fails mid-session, fall through to Web Speech
+            backendTtsAvailable = false;
+            refreshVoices();
+          } catch (_) {
+            backendTtsAvailable = false;
+            refreshVoices();
           }
+        }
 
+        // Web Speech fallback
+        await speakWebSpeech(text);
+      }
+
+      function playAudioBlob(url, approxChars) {
+        return new Promise(resolve => {
+          isSpeaking = true;
+          const audio = new Audio(url);
+          const cleanup = () => {
+            isSpeaking = false;
+            URL.revokeObjectURL(url);
+            resolve();
+          };
+          audio.onended = cleanup;
+          audio.onerror = cleanup;
+          // Safety guard: ~60ms per character, min 8s
+          const guard = setTimeout(cleanup, Math.max(8000, approxChars * 60));
+          audio.oncanplaythrough = () => clearTimeout(guard);
+          audio.play().catch(cleanup);
+        });
+      }
+
+      function speakWebSpeech(text) {
+        return new Promise(resolve => {
+          if (!("speechSynthesis" in window)) { resolve(); return; }
           speechSynthesis.cancel();
           const u = new SpeechSynthesisUtterance(text);
-          u.rate = 1;
-          u.pitch = 1;
+          u.rate = 0.94; u.pitch = 1.02; u.volume = 1;
+          if (preferredVoice) u.voice = preferredVoice;
           isSpeaking = true;
-          u.onend = () => {
-            isSpeaking = false;
-            resolve();
-          };
-          u.onerror = () => {
-            isSpeaking = false;
-            resolve();
-          };
+
+          // Chrome onend bug guard
+          const maxMs = Math.max(6000, text.length * 80);
+          const guard = setTimeout(() => { isSpeaking = false; resolve(); }, maxMs);
+          u.onend = u.onerror = () => { clearTimeout(guard); isSpeaking = false; resolve(); };
           speechSynthesis.speak(u);
         });
       }
 
-      function playChime() {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = "sine";
-        osc.frequency.value = 660;
-        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.04);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.7);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.72);
+      function normalizeText(t) {
+        return (t || "").toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
       }
 
-      function clearPendingListen() {
-        if (pendingListenTimer) {
-          clearTimeout(pendingListenTimer);
-          pendingListenTimer = null;
-        }
-      }
-
-      function scheduleListening(delayMs = 600) {
-        clearPendingListen();
-        pendingListenTimer = setTimeout(() => {
-          startRecognition();
-        }, delayMs);
-      }
-
-      function normalizeText(text) {
-        return (text || "").toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
-      }
-
-      function shouldDropAsEcho(transcript) {
-        const userText = normalizeText(transcript);
-        const aiText = normalizeText(lastAssistantMessage);
-        if (!userText || !aiText) return false;
-        if (userText.length < 6) return true;
-        if (aiText.includes(userText)) return true;
-        if (userText.includes(aiText.slice(0, Math.min(aiText.length, 30)))) return true;
+      function isEcho(transcript) {
+        const u = normalizeText(transcript);
+        const a = normalizeText(lastAiText);
+        if (!u || u.length < 6) return true;
+        if (a && a.includes(u)) return true;
+        if (a && u.includes(a.slice(0, Math.min(a.length, 36)))) return true;
         return false;
       }
 
-      async function submitUserTurn(transcript) {
-        if (!isSessionActive || isProcessing) return;
-        isProcessing = true;
-        statusEl.textContent = "Processing...";
+      // ── Progress panel ──
+      const STAGE_ORDER = ["thinking", "assessing", "critic", "writing"];
 
-        try {
-          const response = await fetch(`${API}/api/session/${sessionId}/turn`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transcript })
-          }).then((x) => x.json());
-
-          lastAssistantMessage = response.assistant_message || "";
-          addLog(`AI Doctor: ${lastAssistantMessage}`);
-          await speak(lastAssistantMessage);
-
-          if (response.ask_follow_up) {
-            scheduleListening(450);
-          } else {
-            isSessionActive = false;
-            startBtn.disabled = false;
-            startBtn.textContent = "Start Voice Session";
-            statusEl.textContent = "Session complete. Press Start to begin another.";
-          }
-        } catch (err) {
-          statusEl.textContent = "Network error while processing. Try again.";
-        } finally {
-          isProcessing = false;
-        }
+      function resetProgress() {
+        STAGE_ORDER.forEach(s => {
+          const step = document.getElementById(`step-${s}`);
+          const icon = document.getElementById(`icon-${s}`);
+          if (step) { step.className = "progress-step"; }
+          if (icon) { icon.className = "step-icon pending"; icon.textContent = ""; }
+        });
+        document.getElementById("progressPanel").classList.remove("visible");
       }
 
+      function showProgress() {
+        resetProgress();
+        document.getElementById("progressPanel").classList.add("visible");
+      }
+
+      function advanceProgress(stage) {
+        // Mark all earlier stages as done
+        const idx = STAGE_ORDER.indexOf(stage);
+        STAGE_ORDER.forEach((s, i) => {
+          const step = document.getElementById(`step-${s}`);
+          const icon = document.getElementById(`icon-${s}`);
+          if (!step || !icon) return;
+          if (i < idx) {
+            step.className = "progress-step step-done";
+            icon.className = "step-icon done";
+            icon.textContent = "✓";
+          } else if (i === idx) {
+            step.className = "progress-step step-active";
+            icon.className = "step-icon active";
+            icon.textContent = "";
+          } else {
+            step.className = "progress-step";
+            icon.className = "step-icon pending";
+            icon.textContent = "";
+          }
+        });
+      }
+
+      function completeProgress() {
+        STAGE_ORDER.forEach(s => {
+          const step = document.getElementById(`step-${s}`);
+          const icon = document.getElementById(`icon-${s}`);
+          if (step) step.className = "progress-step step-done";
+          if (icon) { icon.className = "step-icon done"; icon.textContent = "✓"; }
+        });
+        // Brief pause, then hide
+        setTimeout(() => {
+          document.getElementById("progressPanel").classList.remove("visible");
+          resetProgress();
+        }, 800);
+      }
+
+      // ── Launch chime ──
+      function playChime() {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx();
+        const now = ctx.currentTime;
+        const master = ctx.createGain();
+        master.gain.setValueAtTime(0.0001, now);
+        master.gain.exponentialRampToValueAtTime(0.45, now + 0.08);
+        master.gain.exponentialRampToValueAtTime(0.0001, now + 2.1);
+        master.connect(ctx.destination);
+        [329.63, 493.88, 659.25].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const g   = ctx.createGain();
+          osc.type = i === 0 ? "triangle" : "sine";
+          osc.frequency.setValueAtTime(freq, now);
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.exponentialRampToValueAtTime(0.22 / (i + 1), now + 0.06 + i * 0.05);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 1.4 + i * 0.18);
+          osc.connect(g); g.connect(master);
+          osc.start(now + i * 0.06);
+          osc.stop(now + 1.8 + i * 0.2);
+        });
+      }
+
+      async function playLaunch() {
+        launchOverlay.classList.add("active");
+        playChime();
+        await wait(2500);
+        launchOverlay.classList.remove("active");
+      }
+
+      // ── Recognition ──
       function stopRecognition() {
-        if (recognizer && isListening) {
-          try {
-            recognizer.stop();
-          } catch (_) {}
-        }
+        if (recognizer && isListening) { try { recognizer.stop(); } catch (_) {} }
         isListening = false;
       }
 
       function startRecognition() {
-        if (!isSessionActive || isListening || isSpeaking || isProcessing) return;
-
+        if (!isSessionActive || isListening || isSpeaking || isProcessing || useTextMode) return;
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SR) {
-          statusEl.textContent = "Speech recognition not available in this browser.";
-          return;
-        }
-
+        if (!SR) { enableTextMode(); return; }
         recognizer = new SR();
         recognizer.lang = "en-US";
         recognizer.interimResults = false;
         recognizer.maxAlternatives = 1;
         recognizer.continuous = false;
-
-        statusEl.innerHTML = '<span class="pulse"></span>Listening...';
         isListening = true;
+        heardResult = false;
+        setStatus('<span class="pulse"></span>Listening...');
         recognizer.start();
 
-        recognizer.onresult = async (event) => {
+        recognizer.onresult = async (e) => {
           isListening = false;
-          const transcript = event.results[0][0].transcript;
-          if (shouldDropAsEcho(transcript)) {
-            scheduleListening(350);
-            return;
-          }
-          addLog(`You: ${transcript}`);
-          await submitUserTurn(transcript);
+          heardResult = true;
+          const transcript = e.results[0][0].transcript;
+          if (isEcho(transcript)) { scheduleListen(350); return; }
+          addLog("you", transcript);
+          await submitTurn(transcript);
         };
-
         recognizer.onerror = () => {
           isListening = false;
-          if (isSessionActive && !isSpeaking && !isProcessing) {
-            statusEl.textContent = "Could not capture speech. Listening again...";
-            scheduleListening(500);
-          }
+          if (isSessionActive && !isSpeaking && !isProcessing) scheduleListen(500);
         };
-
         recognizer.onend = () => {
           isListening = false;
+          if (isSessionActive && !isSpeaking && !isProcessing && !heardResult) {
+            setStatus("Still listening...");
+            scheduleListen(350);
+          }
         };
       }
 
-      startBtn.onclick = async () => {
-        if (isSessionActive) return;
-        clearPendingListen();
-        stopRecognition();
-        speechSynthesis.cancel();
+      // ── Text mode ──
+      function enableTextMode() {
+        useTextMode = true;
+        document.getElementById("textInputRow").style.display = "flex";
+        document.getElementById("modeToggle").style.display   = "none";
+        setStatus("Type your response below.");
+      }
 
-        startBtn.disabled = true;
-        startBtn.textContent = "Session Running...";
+      function disableTextMode() {
+        useTextMode = false;
+        document.getElementById("textInputRow").style.display = "none";
+        document.getElementById("modeToggle").style.display   = "inline-block";
+        scheduleListen(400);
+      }
+
+      document.getElementById("modeToggle").addEventListener("click", () => {
+        if (useTextMode) disableTextMode(); else enableTextMode();
+      });
+
+      async function sendTextInput() {
+        const input = document.getElementById("textInput");
+        const text = input.value.trim();
+        if (!text || isProcessing) return;
+        input.value = "";
+        addLog("you", text);
+        await submitTurn(text);
+      }
+
+      document.getElementById("textSendBtn").addEventListener("click", sendTextInput);
+      document.getElementById("textInput").addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextInput(); }
+      });
+
+      // ── SSE stream reader ──
+      async function readTurnStream(response, onProgress, onResult) {
+        const reader  = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // SSE lines end with \n\n
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop(); // keep last incomplete chunk
+
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const evt = JSON.parse(line.slice(6));
+              if (evt.type === "progress") onProgress(evt);
+              else if (evt.type === "result") onResult(evt.data);
+            } catch (_) {}
+          }
+        }
+      }
+
+      // ── Core turn submission ──
+      async function submitTurn(transcript) {
+        if (!isSessionActive || isProcessing) return;
+        isProcessing = true;
+        document.getElementById("textSendBtn").disabled = true;
+        setStatus("Processing...");
+
+        let resultData = null;
+        let isAssessment = false;
+
+        try {
+          const response = await fetch(`${API}/api/session/${sessionId}/turn`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript }),
+          });
+
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+          await readTurnStream(
+            response,
+            (evt) => {
+              // Progress event
+              if (!isAssessment) {
+                isAssessment = true;
+                showProgress();
+                setStatus("Analyzing...");
+              }
+              advanceProgress(evt.stage);
+            },
+            (data) => { resultData = data; },
+          );
+
+          if (!resultData) throw new Error("No result received");
+
+          if (isAssessment) completeProgress();
+
+          lastAiText = resultData.assistant_message || "";
+          addLog("ai", lastAiText);
+          await speak(lastAiText);
+
+          if (resultData.ask_follow_up) {
+            if (useTextMode) {
+              setStatus("Type your response below.");
+            } else {
+              scheduleListen(450);
+            }
+          } else {
+            isSessionActive = false;
+            setStatus("Assessment complete. Press New Session to start over.");
+            if (resultData.assessment) renderAssessment(resultData.assessment);
+          }
+        } catch (err) {
+          console.error(err);
+          if (isAssessment) resetProgress();
+          setStatus("Network error. Please check your connection and try again.");
+          isSessionActive = false;
+        } finally {
+          isProcessing = false;
+          document.getElementById("textSendBtn").disabled = false;
+        }
+      }
+
+      // ── Assessment rendering ──
+      const URGENCY_CONFIG = {
+        emergency_now:    { label: "🚨  EMERGENCY — Call 911 or Go to ER Now",          cls: "urgency-emergency" },
+        urgent_today:     { label: "⚠️  URGENT — Seek Care Today",                       cls: "urgency-urgent"    },
+        specialist_soon:  { label: "📅  Schedule a Clinician Visit (Within 2-5 Days)",   cls: "urgency-soon"      },
+        self_care_monitor:{ label: "✓  Home Care & Monitor Symptoms",                    cls: "urgency-monitor"   },
+      };
+
+      function renderAssessment(a) {
+        const panel = document.getElementById("assessmentPanel");
+        panel.classList.add("visible");
+
+        const cfg = URGENCY_CONFIG[a.urgency] || URGENCY_CONFIG["specialist_soon"];
+        const header = document.getElementById("urgencyHeader");
+        header.textContent = cfg.label;
+        header.className = "urgency-header " + cfg.cls;
+
+        const pills = document.getElementById("conditionPills");
+        pills.innerHTML = "";
+        if (a.likely_conditions && a.likely_conditions.length) {
+          a.likely_conditions.forEach(c => {
+            const el = document.createElement("span");
+            el.className = "condition-pill";
+            el.textContent = c;
+            pills.appendChild(el);
+          });
+          document.getElementById("conditionsSection").style.display = "block";
+        }
+
+        document.getElementById("nextStepBox").textContent = a.recommended_next_step || "";
+
+        const careList = document.getElementById("careList");
+        careList.innerHTML = "";
+        if (a.care_instructions && a.care_instructions.length) {
+          a.care_instructions.forEach(c => {
+            const li = document.createElement("li"); li.textContent = c;
+            careList.appendChild(li);
+          });
+          document.getElementById("careSection").style.display = "block";
+        }
+
+        const rxList = document.getElementById("rxList");
+        rxList.innerHTML = "";
+        if (a.prescription_guidance && a.prescription_guidance.length) {
+          a.prescription_guidance.forEach(r => {
+            const li = document.createElement("li"); li.textContent = r;
+            rxList.appendChild(li);
+          });
+          document.getElementById("rxSection").style.display = "block";
+        }
+
+        panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+
+      // ── Session start ──
+      async function beginSession(profile) {
+        clearPending();
+        stopRecognition();
+        if ("speechSynthesis" in window) speechSynthesis.cancel();
+        isSessionActive = false;
+        isProcessing    = false;
+        isSpeaking      = false;
+        isListening     = false;
+        useTextMode     = false;
+        lastAiText      = "";
+
+        // Reset UI
+        document.getElementById("conversationLog").innerHTML = "";
+        document.getElementById("assessmentPanel").classList.remove("visible");
+        document.getElementById("conditionsSection").style.display = "none";
+        document.getElementById("careSection").style.display   = "none";
+        document.getElementById("rxSection").style.display     = "none";
+        document.getElementById("textInputRow").style.display  = "none";
+        document.getElementById("modeToggle").style.display    = "none";
+        resetProgress();
+        setStatus("Starting session...");
+
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+          useTextMode = true;
+          document.getElementById("textInputRow").style.display = "flex";
+        } else {
+          document.getElementById("modeToggle").style.display = "inline-block";
+          document.getElementById("modeToggle").textContent = "Switch to text input";
+        }
+
+        // Probe backend TTS availability (once per page load)
+        if (backendTtsAvailable === null) {
+          probeBackendTts(); // fire and forget — first response may use Web Speech
+        }
+
+        const start = await fetch(`${API}/api/session/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ patient_profile: profile }),
+        }).then(r => r.json());
+
+        sessionId = start.session_id;
         isSessionActive = true;
 
-        const start = await fetch(`${API}/api/session/start`, { method: "POST" }).then((x) => x.json());
-        sessionId = start.session_id;
-        logEl.textContent = "";
-
-        playChime();
         const opening = `${start.welcome_message} ${start.first_question}`;
-        lastAssistantMessage = opening;
-        addLog(`AI Doctor: ${opening}`);
+        lastAiText = opening;
+        addLog("ai", opening);
         await speak(opening);
 
-        scheduleListening(300);
-      };
+        if (useTextMode) {
+          setStatus("Type your response below.");
+        } else {
+          scheduleListen(400);
+        }
+      }
+
+      // ── Onboarding form submit ──
+      document.getElementById("onboardForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const age  = parseInt(document.getElementById("fieldAge").value, 10);
+        const sex  = document.getElementById("fieldSex").value;
+        const errEl = document.getElementById("formError");
+
+        if (!age || age < 1 || age > 120 || !sex) {
+          errEl.style.display = "block";
+          return;
+        }
+        errEl.style.display = "none";
+
+        const name = document.getElementById("fieldName").value.trim() || null;
+        const cc   = document.getElementById("fieldCC").value.trim() || null;
+        const pmhChecked = [...document.querySelectorAll('input[name="pmh"]:checked')].map(cb => cb.value);
+
+        const medsRaw = document.getElementById("fieldMeds").value.trim();
+        const meds = medsRaw && medsRaw.toLowerCase() !== "none"
+          ? medsRaw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean)
+          : [];
+
+        const allergyRaw = document.getElementById("fieldAllergies").value.trim();
+        const allergies = allergyRaw && allergyRaw.toLowerCase() !== "none"
+          ? allergyRaw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean)
+          : [];
+
+        const pregnantVal = document.getElementById("fieldPregnant").value;
+        const pregnant = pregnantVal === "yes" ? true : pregnantVal === "no" ? false : null;
+
+        const tempVal     = parseFloat(document.getElementById("fieldTemp").value);
+        const systolicVal = parseInt(document.getElementById("fieldSystolic").value, 10);
+        const diastoVal   = parseInt(document.getElementById("fieldDiastolic").value, 10);
+        const hrVal       = parseInt(document.getElementById("fieldHR").value, 10);
+        const spo2Val     = parseInt(document.getElementById("fieldSpO2").value, 10);
+
+        const profile = {
+          name, age, sex, pregnant,
+          chief_complaint: cc,
+          pmh_conditions: pmhChecked,
+          current_medications: meds,
+          allergies,
+          temperature_f:  (!isNaN(tempVal)     && tempVal >= 88   && tempVal <= 110) ? tempVal     : null,
+          systolic_bp:    (!isNaN(systolicVal)  && systolicVal >= 60  && systolicVal <= 280) ? systolicVal  : null,
+          diastolic_bp:   (!isNaN(diastoVal)    && diastoVal >= 30    && diastoVal <= 160)   ? diastoVal    : null,
+          heart_rate:     (!isNaN(hrVal)        && hrVal >= 20        && hrVal <= 300)        ? hrVal        : null,
+          spo2:           (!isNaN(spo2Val)      && spo2Val >= 50      && spo2Val <= 100)      ? spo2Val      : null,
+        };
+
+        document.getElementById("beginBtn").disabled = true;
+
+        await playLaunch();
+
+        onboardScreen.classList.remove("active");
+        sessionScreen.classList.add("active");
+
+        await beginSession(profile);
+      });
+
+      // ── Pregnancy field toggle ──
+      document.getElementById("fieldSex").addEventListener("change", function () {
+        const row = document.getElementById("pregnantRow");
+        row.style.display = (this.value === "female" || this.value === "other") ? "block" : "none";
+      });
+
+      // ── Home → Onboard ──
+      document.getElementById("startBtn").addEventListener("click", () => {
+        homeScreen.classList.remove("active");
+        onboardScreen.classList.add("active");
+      });
+
+      // ── New Session → back to onboard ──
+      document.getElementById("newSessionBtn").addEventListener("click", () => {
+        clearPending();
+        stopRecognition();
+        if ("speechSynthesis" in window) speechSynthesis.cancel();
+        isSessionActive = false;
+        document.getElementById("beginBtn").disabled = false;
+        sessionScreen.classList.remove("active");
+        onboardScreen.classList.add("active");
+      });
     </script>
   </body>
 </html>

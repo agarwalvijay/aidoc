@@ -1,29 +1,34 @@
-import json
+import asyncio
+import json as _json
 import logging
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel
 
 from .config import settings
-from .intake import next_follow_up
 from .llm import get_clinician_llm, get_llm_status
 from .models import (
     ChatMessage,
     ConfidenceLevel,
+    RedFlagHit,
     Role,
+    StartSessionRequest,
     StartSessionResponse,
+    TriageAssessment,
     TurnRequest,
     TurnResponse,
     UrgencyLevel,
 )
+from .pipeline import run_assessment_pipeline
 from .red_flags import detect_red_flags
 from .session_store import session_store
-from .triage import build_assessment
+from .triage import apply_safety_policy, build_red_flag_assessment
 
-logger = logging.getLogger("aidoc")
+logger = logging.getLogger("uvicorn.error")
 
-
-app = FastAPI(title="AI Doctor API", version="0.1.0")
+app = FastAPI(title="AI Doctor API", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,36 +38,124 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-def _joined_user_transcript(session_messages: list[ChatMessage], latest_transcript: str) -> str:
-    """Build a conversation-level user symptom narrative for triage and LLM prompts."""
-    user_turns = [m.content.strip() for m in session_messages if m.role == Role.user and m.content.strip()]
-    if not user_turns:
-        user_turns = [latest_transcript]
-    return " | ".join(user_turns)
+_CONDITION_OPENERS: dict[str, str] = {
+    "uri": "How long have you had these symptoms, and do you have a fever?",
+    "gi": "When did this start, and have you had any nausea, vomiting, or diarrhea?",
+    "uti": "How long have you had the burning sensation, and are you also experiencing increased frequency or urgency to urinate?",
+    "rash": "Where on your body is the rash, and how would you describe it — is it raised, flat, blistering, or scaly?",
+    "back": "Did this start suddenly or gradually, and does the pain radiate anywhere down your legs?",
+    "headache": "How quickly did the headache come on, and on a scale of 0 to 10 how severe is it right now?",
+    "mental": "Over the past two weeks, have you had little interest or pleasure in doing things you usually enjoy?",
+    "htn": "What have your recent blood pressure readings been at home, and are you taking your medications as prescribed?",
+    "dm": "How have your blood glucose readings been lately, and are you taking your diabetes medications as prescribed?",
+}
+
+_CONDITION_KEYWORDS: list[tuple[str, str]] = [
+    ("uri", ["cough", "cold", "sore throat", "runny nose", "congestion", "uri", "flu", "respiratory", "nasal"]),
+    ("gi", ["stomach", "nausea", "vomit", "diarrhea", "abdominal", "gi", "bowel", "belly", "cramp", "indigestion", "heartburn"]),
+    ("uti", ["urine", "urination", "burning", "uti", "bladder", "dysuria", "frequency", "urgency urinating"]),
+    ("rash", ["rash", "skin", "itch", "hives", "redness", "blister", "bumps on skin"]),
+    ("back", ["back pain", "back ache", "lower back", "spine", "lumbar", "back is hurting"]),
+    ("headache", ["headache", "migraine", "head pain", "head is pounding", "head hurts"]),
+    ("mental", ["anxious", "anxiety", "depressed", "depression", "mood", "mental health", "panic", "sad", "hopeless"]),
+    ("htn", ["blood pressure", "hypertension", "bp check", "htn"]),
+    ("dm", ["diabetes", "blood sugar", "glucose", "diabetic", "dm", "insulin"]),
+]
 
 
-def _infer_sensitive_specialist(conditions: list[str]) -> str:
-    joined = " ".join([c.lower() for c in conditions])
-    mapping = [
-        ("cancer", "Oncologist"),
-        ("tumor", "Oncologist"),
-        ("breast lump", "Breast Surgeon or Oncologist"),
-        ("blood in stool", "Gastroenterologist"),
-        ("blood in urine", "Urologist"),
-        ("suicidal", "Psychiatrist"),
-        ("depression", "Psychiatrist"),
-        ("pregnancy", "Obstetrician-Gynecologist"),
-        ("pelvic pain", "Obstetrician-Gynecologist"),
-        ("stroke", "Neurologist"),
-        ("seizure", "Neurologist"),
-        ("chest pain", "Cardiologist"),
-        ("heart", "Cardiologist"),
-    ]
-    for key, specialist in mapping:
-        if key in joined:
-            return specialist
-    return "Relevant Specialist"
+def _check_critical_vitals(profile) -> tuple:
+    """
+    Deterministic gate for emergency-level vitals recorded at intake.
+    Returns (is_critical: bool, assessment: TriageAssessment | None, message: str | None).
+    Thresholds: BP ≥ 180/120, HR > 150, SpO2 < 92%, Temp ≥ 105°F.
+    """
+    flags = []
+    care = []
+
+    s = profile.systolic_bp
+    d = profile.diastolic_bp
+    if (s is not None and s >= 180) or (d is not None and d >= 120):
+        flags.append(f"BP {s}/{d} mmHg — hypertensive crisis range")
+        care.append("Call 911 or go to the ER immediately for hypertensive crisis evaluation.")
+        care.append("Do not drive yourself.")
+
+    hr = profile.heart_rate
+    if hr is not None and hr > 150:
+        flags.append(f"HR {hr} bpm — extreme tachycardia")
+        care.append("Heart rate above 150 at rest requires immediate emergency evaluation.")
+
+    o2 = profile.spo2
+    if o2 is not None and o2 < 92:
+        flags.append(f"SpO2 {o2}% — critical hypoxia")
+        care.append("Oxygen saturation is critically low. Call 911 immediately.")
+
+    t = profile.temperature_f
+    if t is not None and t >= 105.0:
+        flags.append(f"Temp {t}°F — dangerously high fever")
+        care.append("Temperature above 105°F is a medical emergency. Go to the ER now.")
+
+    if not flags:
+        return False, None, None
+
+    flag_text = "; ".join(flags)
+    assessment = TriageAssessment(
+        urgency=UrgencyLevel.emergency_now,
+        confidence_level=ConfidenceLevel.high,
+        likely_conditions=["Potential emergency — critical vital signs recorded at intake"],
+        confidence_note=f"Critical vital sign(s) detected: {flag_text}.",
+        reasoning=f"Deterministic escalation: {flag_text}.",
+        recommended_next_step="Call 911 or go to the nearest emergency room immediately.",
+        safety_rationale="Emergency-level vitals recorded at intake require immediate evaluation.",
+        care_instructions=care or ["Call 911 or go to the ER immediately."],
+        red_flag_hits=[RedFlagHit(code="critical_vitals", evidence=flag_text)],
+    )
+    message = (
+        f"I need to flag something important right away. The vitals you recorded — {flag_text} — "
+        "are in an emergency range. Please call 911 or have someone take you to the nearest "
+        "emergency room immediately. Do not wait and do not drive yourself."
+    )
+    return True, assessment, message
+
+
+def _classify_complaint(complaint: str) -> str:
+    lower = complaint.lower()
+    for condition, keywords in _CONDITION_KEYWORDS:
+        if any(kw in lower for kw in keywords):
+            return condition
+    return ""
+
+
+def _first_question(profile) -> str:
+    cc = (profile.chief_complaint or "").strip()
+    if not cc:
+        return "What symptoms are bringing you in today? Please describe what's been bothering you."
+
+    condition = _classify_complaint(cc)
+    opener = _CONDITION_OPENERS.get(condition)
+    if opener:
+        return f"You mentioned {cc}. {opener}"
+
+    return (
+        f"You mentioned {cc}. "
+        "How long have you been experiencing this, and how would you describe the severity on a scale of 0 to 10?"
+    )
+
+
+# ---------------------------------------------------------------------------
+# SSE helper
+# ---------------------------------------------------------------------------
+
+def _sse(obj: dict) -> str:
+    return f"data: {_json.dumps(obj)}\n\n"
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 
 @app.get("/api/health")
@@ -76,157 +169,219 @@ async def health() -> dict:
 
 
 @app.post("/api/session/start", response_model=StartSessionResponse)
-async def start_session() -> StartSessionResponse:
-    session = session_store.create()
+async def start_session(request: StartSessionRequest) -> StartSessionResponse:
+    profile = request.patient_profile
+    session = session_store.create_with_profile(profile)
 
-    branding = "AI Doctor: Voice-first clinical triage assistant"
-    welcome = "Welcome. I can help triage symptoms and recommend next steps safely."
-    first_question = "What symptoms or conditions are you experiencing today?"
+    name_part = f", {profile.name}" if profile.name else ""
+    welcome = (
+        f"Hello{name_part}. I've reviewed the information you provided and I'm here to help "
+        "assess your symptoms today. I'll ask a few focused questions — please answer as clearly "
+        "as you can, and I'll guide you toward the right next steps."
+    )
 
-    session.messages.append(ChatMessage(role=Role.assistant, content=welcome))
-    session.asked_questions.append(first_question)
+    # ── Critical vitals gate — flag emergency readings before intake begins ──
+    is_critical, vital_assessment, vital_message = _check_critical_vitals(profile)
+    if is_critical:
+        session.messages.append(ChatMessage(role=Role.assistant, content=f"{welcome} {vital_message}"))
+        logger.warning("[CRITICAL_VITALS_AT_START] session=%s", session.session_id)
+        return StartSessionResponse(
+            session_id=session.session_id,
+            welcome_message=welcome,
+            first_question=vital_message,
+        )
+
+    # ── LLM generates the opening question from full patient context ──
+    llm = get_clinician_llm()
+    first_q = _first_question(profile)  # deterministic fallback
+    try:
+        result = await asyncio.to_thread(
+            llm.process_turn,
+            profile=profile,
+            conversation=[],
+            force_assess=False,
+        )
+        if result.get("action") == "ask_question":
+            q = str(result.get("question", "")).strip()
+            if len(q) > 8:
+                first_q = q if q.endswith("?") else q + "?"
+    except Exception as exc:
+        logger.error("[LLM_START_ERROR] session=%s error=%s", session.session_id, exc)
+
+    session.messages.append(ChatMessage(role=Role.assistant, content=f"{welcome} {first_q}"))
 
     return StartSessionResponse(
         session_id=session.session_id,
-        branding_message=branding,
         welcome_message=welcome,
-        first_question=first_question,
-        play_chime=True,
+        first_question=first_q,
     )
 
 
-@app.post("/api/session/{session_id}/turn", response_model=TurnResponse)
-async def process_turn(session_id: str, request: TurnRequest) -> TurnResponse:
+@app.post("/api/session/{session_id}/turn")
+async def process_turn(session_id: str, request: TurnRequest) -> StreamingResponse:
     session = session_store.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
     session.turn_count += 1
     session.messages.append(ChatMessage(role=Role.user, content=request.transcript))
-    llm = get_clinician_llm()
-    transcript_context = _joined_user_transcript(session.messages, request.transcript)
 
-    red_flags = detect_red_flags(transcript_context)
+    all_user_text = " ".join(m.content for m in session.messages if m.role == Role.user)
+    red_flags = detect_red_flags(all_user_text)
 
-    # Ask up to 3 follow-up questions before final assessment, unless red flags trigger immediate escalation.
-    should_finalize = bool(red_flags) or session.turn_count >= 4
-
-    if not should_finalize:
-        question = None
-        try:
-            question = llm.generate_follow_up(transcript_context, session.asked_questions)
-        except Exception:
-            question = None
-        if not question:
-            question = next_follow_up(session.asked_questions)
-        if question:
-            session.asked_questions.append(question)
-            session.messages.append(ChatMessage(role=Role.assistant, content=question))
-            return TurnResponse(
+    async def stream():
+        # ── Hard gate: deterministic red-flag check ──
+        if red_flags:
+            assessment, assistant_message = build_red_flag_assessment(red_flags)
+            session.messages.append(ChatMessage(role=Role.assistant, content=assistant_message))
+            logger.warning("[RED_FLAG] session=%s flags=%s", session_id, [rf.code for rf in red_flags])
+            resp = TurnResponse(
                 session_id=session_id,
-                assistant_message=question,
-                ask_follow_up=True,
-                follow_up_question=question,
+                assistant_message=assistant_message,
+                ask_follow_up=False,
+                assessment=assessment,
             )
+            yield _sse({"type": "result", "data": resp.model_dump()})
+            return
 
-    assessment = build_assessment(
-        transcript=transcript_context,
-        red_flags=red_flags,
-        conservative_mode=settings.conservative_mode,
-    )
+        # ── LLM intake turn ──
+        yield _sse({"type": "progress", "stage": "thinking", "label": "Reviewing your responses..."})
 
-    enhancement = {}
-    if not red_flags:
+        min_turns = max(1, settings.min_turns_before_assessment)
+        max_turns = max(min_turns, settings.max_turns_before_assessment)
+        force_assess = session.turn_count >= max_turns
+
+        llm = get_clinician_llm()
         try:
-            enhancement = llm.generate_assessment_enhancement(
-                transcript_context,
-                assessment.model_dump(),
+            result = await asyncio.to_thread(
+                llm.process_turn,
+                profile=session.patient_profile,
+                conversation=session.messages,
+                force_assess=force_assess,
             )
-        except Exception:
-            enhancement = {}
+        except Exception as exc:
+            logger.error("[LLM_ERROR] session=%s error=%s", session_id, exc)
+            result = {}
 
-        if isinstance(enhancement.get("confidence_level"), str):
-            value = enhancement.get("confidence_level", "").strip().lower()
-            if value in ("high", "medium", "low"):
-                assessment.confidence_level = ConfidenceLevel(value)
+        action = result.get("action", "")
 
-        if isinstance(enhancement.get("likely_conditions"), list):
-            safe_conditions = [str(c).strip() for c in enhancement["likely_conditions"] if str(c).strip()]
-            if safe_conditions:
-                assessment.likely_conditions = safe_conditions[:3]
+        # ── Follow-up question path ──
+        if action == "ask_question" and not force_assess:
+            question = str(result.get("question", "")).strip()
+            if question and not question.endswith("?"):
+                question += "?"
+            if question and len(question) > 8:
+                session.messages.append(ChatMessage(role=Role.assistant, content=question))
+                resp = TurnResponse(
+                    session_id=session_id,
+                    assistant_message=question,
+                    ask_follow_up=True,
+                    follow_up_question=question,
+                )
+                yield _sse({"type": "result", "data": resp.model_dump()})
+                return
 
-        if isinstance(enhancement.get("confidence_note"), str) and enhancement["confidence_note"].strip():
-            assessment.confidence_note = enhancement["confidence_note"].strip()
+        # ── Assessment path ──
+        intake_summary = result.get("intake_summary")
 
-        if isinstance(enhancement.get("care_instructions"), list):
-            care = [str(c).strip() for c in enhancement["care_instructions"] if str(c).strip()]
-            if care:
-                assessment.care_instructions = care[:6]
+        if intake_summary is not None:
+            # Pipeline path: progress events emitted per stage via callback
+            queue: asyncio.Queue = asyncio.Queue()
+            loop = asyncio.get_running_loop()
 
-        if isinstance(enhancement.get("prescription_guidance"), list):
-            rx = [str(c).strip() for c in enhancement["prescription_guidance"] if str(c).strip()]
-            if rx:
-                assessment.prescription_guidance = rx[:4]
+            def progress_cb(stage: str, label: str) -> None:
+                asyncio.run_coroutine_threadsafe(
+                    queue.put({"type": "progress", "stage": stage, "label": label}),
+                    loop,
+                )
 
-        if isinstance(enhancement.get("recommended_next_step"), str) and enhancement["recommended_next_step"].strip():
-            assessment.recommended_next_step = enhancement["recommended_next_step"].strip()
+            async def run_pipeline() -> None:
+                try:
+                    fa, pm = await asyncio.to_thread(
+                        run_assessment_pipeline,
+                        profile=session.patient_profile,
+                        conversation=session.messages,
+                        intake_summary=intake_summary,
+                        invoke_fn=llm.invoke_raw,
+                        prescribing_enabled=settings.prescribing_enabled,
+                        progress_callback=progress_cb,
+                    )
+                except Exception as exc:
+                    logger.error("[PIPELINE_ERROR] session=%s error=%s", session_id, exc)
+                    fa, pm = {}, ""
+                await queue.put({"__done__": True, "result": (fa, pm)})
 
-        if isinstance(enhancement.get("sensitive_condition"), bool):
-            assessment.sensitive_condition = enhancement["sensitive_condition"]
+            asyncio.create_task(run_pipeline())
 
-        if isinstance(enhancement.get("specialist_type"), str) and enhancement["specialist_type"].strip():
-            assessment.specialist_type = enhancement["specialist_type"].strip()
+            while True:
+                event = await queue.get()
+                if "__done__" in event:
+                    final_assessment, patient_message = event["result"]
+                    break
+                yield _sse(event)
 
-    if assessment.sensitive_condition and not assessment.specialist_type:
-        assessment.specialist_type = _infer_sensitive_specialist(assessment.likely_conditions)
-
-    if assessment.confidence_level == ConfidenceLevel.low and assessment.urgency == UrgencyLevel.self_care_monitor:
-        assessment.recommended_next_step = "Please follow up with a clinician for in-person evaluation in 24-72 hours."
-    if assessment.sensitive_condition and assessment.specialist_type:
-        assessment.recommended_next_step = (
-            "Please arrange prompt follow-up with a {0}. If symptoms worsen, seek urgent care immediately."
-        ).format(assessment.specialist_type)
-
-    assistant_message = enhancement.get("assistant_message")
-    if not isinstance(assistant_message, str) or not assistant_message.strip():
-        condition_text = ", ".join(assessment.likely_conditions) if assessment.likely_conditions else "an unclear condition"
-        assistant_message = "From what you shared, you may have {0}. ".format(condition_text)
-        if assessment.confidence_level == ConfidenceLevel.high:
-            assistant_message += "I have relatively high confidence in this triage direction. "
-        elif assessment.confidence_level == ConfidenceLevel.medium:
-            assistant_message += "I have moderate confidence, so monitor symptoms closely. "
+            merged = {**final_assessment, "assistant_message": patient_message}
+            assessment, assistant_message = apply_safety_policy(
+                {"assessment": merged},
+                conservative_mode=settings.conservative_mode,
+                prescribing_enabled=settings.prescribing_enabled,
+            )
         else:
-            assistant_message += "My confidence is limited from remote information alone. "
-        assistant_message += "Next step: {0}".format(assessment.recommended_next_step)
+            # Fallback path: NoopLLM or intake LLM returned old full-assessment format
+            assessment, assistant_message = apply_safety_policy(
+                result,
+                conservative_mode=settings.conservative_mode,
+                prescribing_enabled=settings.prescribing_enabled,
+            )
 
-    if assessment.care_instructions:
-        assistant_message += "\n\nCare instructions:\n- " + "\n- ".join(assessment.care_instructions)
-    if assessment.prescription_guidance:
-        assistant_message += "\n\nMedication guidance (confirm with a licensed clinician):\n- " + "\n- ".join(
-            assessment.prescription_guidance
+        logger.info(
+            "[TRIAGE] session=%s urgency=%s confidence=%s conditions=%s",
+            session_id,
+            assessment.urgency,
+            assessment.confidence_level,
+            assessment.likely_conditions,
         )
-    if assessment.sensitive_condition and assessment.specialist_type:
-        assistant_message += "\n\nSpecialist follow-up: {0}".format(assessment.specialist_type)
 
-    logger.info(
-        "[LLM_TRIAGE_DEBUG] %s",
-        json.dumps(
-            {
-                "session_id": session_id,
-                "transcript_context": transcript_context,
-                "deterministic_assessment": assessment.model_dump(),
-                "llm_enhancement": enhancement,
-                "final_assistant_message": assistant_message,
-            },
-            ensure_ascii=True,
-        ),
+        session.messages.append(ChatMessage(role=Role.assistant, content=assistant_message))
+        resp = TurnResponse(
+            session_id=session_id,
+            assistant_message=assistant_message,
+            ask_follow_up=False,
+            assessment=assessment,
+        )
+        yield _sse({"type": "result", "data": resp.model_dump()})
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
-    session.messages.append(ChatMessage(role=Role.assistant, content=assistant_message))
 
-    return TurnResponse(
-        session_id=session_id,
-        assistant_message=assistant_message,
-        ask_follow_up=False,
-        assessment=assessment,
-    )
+# ---------------------------------------------------------------------------
+# TTS endpoint — uses OpenAI TTS if OPENAI_API_KEY is configured.
+# Frontend probes this once; falls back to Web Speech API if unavailable.
+# ---------------------------------------------------------------------------
+
+class _TTSRequest(BaseModel):
+    text: str
+
+
+@app.post("/api/tts")
+async def text_to_speech(request: _TTSRequest) -> Response:
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=501, detail="TTS not configured: OPENAI_API_KEY not set")
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=settings.openai_api_key)
+        tts_response = await asyncio.to_thread(
+            lambda: client.audio.speech.create(
+                model="tts-1",
+                voice="nova",
+                input=request.text[:4096],
+            )
+        )
+        return Response(content=tts_response.content, media_type="audio/mpeg")
+    except Exception as exc:
+        logger.error("[TTS_ERROR] %s", exc)
+        raise HTTPException(status_code=503, detail="TTS service error")
