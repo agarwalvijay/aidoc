@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     google_api_key: Optional[str] = None
     google_model: str = "gemini-1.5-pro"
 
+    # TTS: set True to use OpenAI neural TTS; False forces Web Speech API on the client
+    tts_enabled: bool = True
+
     # Safety posture: conservative floors uncertain cases at specialist_soon
     conservative_mode: bool = True
     # When True, the LLM may recommend specific medications (OTC + limited Rx).

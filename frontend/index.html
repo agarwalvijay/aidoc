@@ -475,8 +475,8 @@
         color: #eff7ff;
         transform: scale(0.25);
         opacity: 0;
-        animation: logoIn 2.2s ease-out forwards;
-        text-shadow: 0 8px 34px rgba(170, 220, 255, 0.3);
+        animation: logoIn 3.8s ease-out forwards;
+        text-shadow: 0 8px 60px rgba(101, 209, 196, 0.5), 0 0 120px rgba(138, 208, 255, 0.2);
         z-index: 2;
       }
       .launch-sweep {
@@ -486,13 +486,14 @@
         transform: rotate(25deg) translateX(-180%);
         background: linear-gradient(90deg, transparent, rgba(162, 223, 255, 0.8), transparent);
         filter: blur(4px);
-        animation: sweep 2.2s ease-out forwards;
+        animation: sweep 3.8s ease-out forwards;
       }
       @keyframes logoIn {
-        0%   { transform: scale(0.25); opacity: 0; }
-        32%  { transform: scale(1.08); opacity: 1; }
-        65%  { transform: scale(0.98); opacity: 1; }
-        100% { transform: scale(1); opacity: 1; }
+        0%   { transform: scale(0.18); opacity: 0; }
+        18%  { transform: scale(1.12); opacity: 1; }
+        38%  { transform: scale(0.96); opacity: 1; }
+        55%  { transform: scale(1.03); opacity: 1; }
+        100% { transform: scale(1);    opacity: 1; }
       }
       @keyframes sweep {
         0%   { transform: rotate(25deg) translateX(-180%); }
@@ -994,35 +995,71 @@
         }, 800);
       }
 
-      // ── Launch chime ──
+      // ── Launch chime — cinematic ascending bloom ──
+      // Structure: deep anchor hit → harmonic bloom → sustained chord ring-out
       function playChime() {
         const Ctx = window.AudioContext || window.webkitAudioContext;
         if (!Ctx) return;
         const ctx = new Ctx();
         const now = ctx.currentTime;
+
+        // Compressor for punch and body
+        const comp = ctx.createDynamicsCompressor();
+        comp.threshold.value = -18;
+        comp.knee.value      = 8;
+        comp.ratio.value     = 4;
+        comp.attack.value    = 0.003;
+        comp.release.value   = 0.25;
+        comp.connect(ctx.destination);
+
+        // Master envelope: quick fade in, long sustain, graceful tail
         const master = ctx.createGain();
         master.gain.setValueAtTime(0.0001, now);
-        master.gain.exponentialRampToValueAtTime(0.45, now + 0.08);
-        master.gain.exponentialRampToValueAtTime(0.0001, now + 2.1);
-        master.connect(ctx.destination);
-        [329.63, 493.88, 659.25].forEach((freq, i) => {
+        master.gain.exponentialRampToValueAtTime(0.75, now + 0.06);
+        master.gain.setValueAtTime(0.75, now + 2.8);
+        master.gain.exponentialRampToValueAtTime(0.0001, now + 5.0);
+        master.connect(comp);
+
+        // Helper: add one voice (osc + optional slight detune for chorus warmth)
+        function voice(freq, startT, type, gainPeak, attackT, decayT, detune = 0) {
           const osc = ctx.createOscillator();
           const g   = ctx.createGain();
-          osc.type = i === 0 ? "triangle" : "sine";
-          osc.frequency.setValueAtTime(freq, now);
-          g.gain.setValueAtTime(0.0001, now);
-          g.gain.exponentialRampToValueAtTime(0.22 / (i + 1), now + 0.06 + i * 0.05);
-          g.gain.exponentialRampToValueAtTime(0.0001, now + 1.4 + i * 0.18);
-          osc.connect(g); g.connect(master);
-          osc.start(now + i * 0.06);
-          osc.stop(now + 1.8 + i * 0.2);
-        });
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, now + startT);
+          osc.detune.value = detune;
+          g.gain.setValueAtTime(0.0001, now + startT);
+          g.gain.exponentialRampToValueAtTime(gainPeak, now + startT + attackT);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + startT + decayT);
+          osc.connect(g);
+          g.connect(master);
+          osc.start(now + startT);
+          osc.stop(now + startT + decayT + 0.1);
+        }
+
+        // — Phase 1: deep anchor thud (like the Netflix low "ta") —
+        voice(65.41,  0.00, "triangle", 0.9,  0.01, 1.4);   // C2 sub-bass
+        voice(130.81, 0.00, "triangle", 0.55, 0.02, 1.2);   // C3 bass body
+        voice(130.81, 0.00, "sine",     0.2,  0.02, 1.0, 4); // slight chorus
+
+        // — Phase 2: resonant mid bloom (~400ms later, like "DUM") —
+        voice(196.00, 0.38, "triangle", 0.50, 0.03, 2.8);   // G3
+        voice(261.63, 0.38, "sine",     0.38, 0.03, 2.6);   // C4
+        voice(196.00, 0.38, "sine",     0.18, 0.03, 2.5, 6); // chorus layer
+
+        // — Phase 3: harmonic bloom — upper chord opens up —
+        voice(329.63, 0.72, "sine",     0.32, 0.04, 3.2);   // E4
+        voice(392.00, 0.90, "sine",     0.26, 0.05, 3.0);   // G4
+        voice(523.25, 1.10, "sine",     0.22, 0.06, 2.8);   // C5
+
+        // — Phase 4: bright shimmer ring-out —
+        voice(1046.5, 1.30, "sine",     0.10, 0.08, 2.4);   // C6 air
+        voice(783.99, 1.20, "sine",     0.14, 0.07, 2.6);   // G5
       }
 
       async function playLaunch() {
         launchOverlay.classList.add("active");
         playChime();
-        await wait(2500);
+        await wait(4200);
         launchOverlay.classList.remove("active");
       }
 
@@ -1354,8 +1391,6 @@
 
         document.getElementById("beginBtn").disabled = true;
 
-        await playLaunch();
-
         onboardScreen.classList.remove("active");
         sessionScreen.classList.add("active");
 
@@ -1368,9 +1403,10 @@
         row.style.display = (this.value === "female" || this.value === "other") ? "block" : "none";
       });
 
-      // ── Home → Onboard ──
-      document.getElementById("startBtn").addEventListener("click", () => {
+      // ── Home → Onboard (chime plays here) ──
+      document.getElementById("startBtn").addEventListener("click", async () => {
         homeScreen.classList.remove("active");
+        await playLaunch();
         onboardScreen.classList.add("active");
       });
 

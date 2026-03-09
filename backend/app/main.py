@@ -165,6 +165,7 @@ async def health() -> dict:
         "service": settings.app_name,
         "env": settings.app_env,
         "llm": get_llm_status(),
+        "tts": "openai" if (settings.tts_enabled and settings.openai_api_key) else "web_speech",
     }
 
 
@@ -369,6 +370,8 @@ class _TTSRequest(BaseModel):
 
 @app.post("/api/tts")
 async def text_to_speech(request: _TTSRequest) -> Response:
+    if not settings.tts_enabled:
+        raise HTTPException(status_code=501, detail="TTS disabled: TTS_ENABLED=false")
     if not settings.openai_api_key:
         raise HTTPException(status_code=501, detail="TTS not configured: OPENAI_API_KEY not set")
     try:
