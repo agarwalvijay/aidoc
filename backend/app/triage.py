@@ -194,6 +194,7 @@ def apply_safety_policy(
             likely_conditions=likely,
             confidence_note=str(raw.get("confidence_note", "")).strip(),
             reasoning=str(raw.get("reasoning", "")).strip(),
+            reasoning_summary=str(raw.get("patient_reasoning", "")).strip(),
             recommended_next_step=next_step,
             safety_rationale="LLM-driven triage with deterministic safety policy applied.",
             care_instructions=care,

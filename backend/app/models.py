@@ -83,6 +83,7 @@ class TriageAssessment(BaseModel):
     likely_conditions: List[str] = Field(default_factory=list)
     confidence_note: str = ""
     reasoning: str = ""
+    reasoning_summary: str = ""   # plain-language explanation shown to the patient
     recommended_next_step: str = ""
     safety_rationale: str = ""
     care_instructions: List[str] = Field(default_factory=list)

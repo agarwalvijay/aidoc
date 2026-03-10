@@ -123,9 +123,20 @@ Requirements:
 - For emergencies: lead with the emergency action first, not the diagnosis
 - For sensitive conditions: be compassionate and clear about specialist referral
 
+You must also write a patient_reasoning: 2-3 plain-language sentences that explain
+WHY this assessment was reached. It should:
+- Name the 2-3 specific findings from the conversation that pointed toward this conclusion
+- Briefly explain why the urgency level was chosen (not too high, not too low)
+- Mention any key negative findings that influenced the assessment (e.g. "the absence of fever makes a serious infection less likely")
+- Never repeat the recommendation — that is already in patient_message
+- Never use clinical jargon
+- Be specific to THIS patient, not generic ("Your 3-day fever and productive cough..."
+  not "Based on your symptoms...")
+
 Return valid JSON only:
 {
-  "patient_message": "..."
+  "patient_message": "...",
+  "patient_reasoning": "..."
 }
 """
 
@@ -278,6 +289,10 @@ def run_assessment_pipeline(
     writer_result = _call_stage(
         invoke_fn, WRITER_SYSTEM_PROMPT, writer_input, "writer", max_tokens=400
     )
-    patient_message = str(writer_result.get("patient_message", "")).strip()
+    patient_message  = str(writer_result.get("patient_message",  "")).strip()
+    patient_reasoning = str(writer_result.get("patient_reasoning", "")).strip()
+
+    # Attach reasoning to the assessment dict so apply_safety_policy can thread it through
+    final_assessment["patient_reasoning"] = patient_reasoning
 
     return final_assessment, patient_message

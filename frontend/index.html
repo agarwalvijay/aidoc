@@ -436,6 +436,16 @@
         font-size: 0.9rem;
         line-height: 1.5;
       }
+      .reasoning-box {
+        background: rgba(20, 40, 30, 0.5);
+        border-left: 3px solid #4caf7d;
+        border-radius: 0 8px 8px 0;
+        padding: 12px 14px;
+        font-size: 0.88rem;
+        line-height: 1.6;
+        color: #c8e8d8;
+        font-style: italic;
+      }
       .care-list {
         list-style: none;
         margin: 0;
@@ -733,6 +743,10 @@
             <div class="assessment-section" id="conditionsSection" style="display:none;">
               <div class="assessment-section-title">Possible Conditions</div>
               <div class="condition-pills" id="conditionPills"></div>
+            </div>
+            <div class="assessment-section" id="reasoningSection" style="display:none;">
+              <div class="assessment-section-title">Why this assessment?</div>
+              <div class="reasoning-box" id="reasoningBox"></div>
             </div>
             <div class="assessment-section">
               <div class="assessment-section-title">Recommended Next Step</div>
@@ -1256,6 +1270,13 @@
           document.getElementById("conditionsSection").style.display = "block";
         }
 
+        // Reasoning summary
+        const reasoningBox = document.getElementById("reasoningBox");
+        if (a.reasoning_summary) {
+          reasoningBox.textContent = a.reasoning_summary;
+          document.getElementById("reasoningSection").style.display = "block";
+        }
+
         document.getElementById("nextStepBox").textContent = a.recommended_next_step || "";
 
         const careList = document.getElementById("careList");
@@ -1297,8 +1318,9 @@
         document.getElementById("conversationLog").innerHTML = "";
         document.getElementById("assessmentPanel").classList.remove("visible");
         document.getElementById("conditionsSection").style.display = "none";
-        document.getElementById("careSection").style.display   = "none";
-        document.getElementById("rxSection").style.display     = "none";
+        document.getElementById("reasoningSection").style.display  = "none";
+        document.getElementById("careSection").style.display       = "none";
+        document.getElementById("rxSection").style.display         = "none";
         document.getElementById("textInputRow").style.display  = "none";
         document.getElementById("modeToggle").style.display    = "none";
         resetProgress();
