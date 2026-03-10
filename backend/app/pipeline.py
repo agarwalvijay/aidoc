@@ -62,10 +62,31 @@ Return valid JSON only:
   "reasoning": "your differential reasoning"
 }}
 
+Urgency definitions — apply these precisely:
+  emergency_now     Life-threatening condition requiring 911 or immediate ER. Examples:
+                    suspected MI/stroke/PE, sepsis with hemodynamic instability, SpO2 < 92%,
+                    BP ≥ 180/120 with end-organ symptoms, suicidal ideation with plan or intent,
+                    cauda equina syndrome, obstetric emergency, anaphylaxis.
+                    Do NOT use for symptoms that are uncomfortable but not imminently dangerous.
+
+  urgent_today      Needs evaluation same day but is not life-threatening. Examples:
+                    suspected pyelonephritis (UTI + flank pain + fever), uncontrolled BP > 160/100
+                    with symptoms, SpO2 92–95%, fever ≥ 103°F, new neurological symptoms,
+                    significant psychiatric crisis without active suicidal plan.
+
+  specialist_soon   Needs in-person evaluation within 2–5 days. Examples:
+                    uncomplicated UTI, uncomplicated URI/pharyngitis, moderate headache without
+                    red flags, stable skin rash of unclear cause, chronic condition follow-up.
+
+  self_care_monitor High confidence benign self-limited condition. Patient is counseled on
+                    specific return precautions. Examples: mild viral URI, mild tension headache,
+                    mild contact dermatitis with clear trigger.
+
 Assessment principles:
 - Base the assessment strictly on gathered information — do not assume.
 - Abnormal vitals must be addressed even if the chief complaint seems unrelated.
-- When uncertain between urgency levels, choose the higher one.
+- When uncertain between urgency levels, choose the higher one — but only between adjacent
+  levels. Do not jump from self_care_monitor to emergency_now without clear justification.
 - When information is incomplete, reflect that as lower confidence.
 - Include at least 2 specific return-precaution items in care_instructions.
 - If prescribing is authorized, apply standard contraindications and allergy checks.
@@ -95,7 +116,12 @@ SAFETY REVIEW — check every item:
    - SpO2 < 92%: emergency_now
    - Fever ≥ 103°F: source must be identified; consider urgent_today
 
-3. URGENCY CALIBRATION — freely UPGRADE; require strong evidence to DOWNGRADE.
+3. URGENCY CALIBRATION:
+   - Freely UPGRADE when red flags are present.
+   - Also DOWNGRADE when clearly over-escalated: a routine uncomplicated UTI, viral URI,
+     tension headache, or mild rash should never be emergency_now. If the proposed urgency
+     is emergency_now but no life-threatening feature is present in the conversation,
+     downgrade it and explain why in issues_found.
 
 4. DRUG SAFETY (if prescription_guidance is non-empty):
    - Allergy check: no medication on the patient's allergy list
