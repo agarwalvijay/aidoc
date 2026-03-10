@@ -499,13 +499,14 @@
       }
       .launch-overlay.active { display: grid; }
       .launch-logo {
-        font-size: clamp(100px, 22vw, 260px);
-        font-weight: 900;
-        color: #eff7ff;
-        transform: scale(0.25);
+        width: clamp(110px, 20vw, 240px);
+        height: clamp(110px, 20vw, 240px);
+        transform: scale(0.18);
         opacity: 0;
         animation: logoIn 3.8s ease-out forwards;
-        text-shadow: 0 8px 60px rgba(101, 209, 196, 0.5), 0 0 120px rgba(138, 208, 255, 0.2);
+        filter:
+          drop-shadow(0 0 28px rgba(101, 209, 196, 0.7))
+          drop-shadow(0 0 80px rgba(138, 208, 255, 0.35));
         z-index: 2;
       }
       .launch-sweep {
@@ -547,7 +548,30 @@
     <!-- Launch overlay -->
     <div id="launchOverlay" class="launch-overlay" aria-hidden="true">
       <div class="launch-sweep"></div>
-      <div class="launch-logo">A</div>
+      <!-- Stethoscope icon -->
+      <svg class="launch-logo" viewBox="0 0 90 102" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="launchGrad" x1="18" y1="4" x2="74" y2="98" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stop-color="#65d1c4"/>
+            <stop offset="100%" stop-color="#8ad0ff"/>
+          </linearGradient>
+        </defs>
+        <!-- Left ear tip -->
+        <line x1="30" y1="5"  x2="19" y2="17" stroke="url(#launchGrad)" stroke-width="5.5" stroke-linecap="round"/>
+        <!-- Right ear tip -->
+        <line x1="60" y1="5"  x2="71" y2="17" stroke="url(#launchGrad)" stroke-width="5.5" stroke-linecap="round"/>
+        <!-- Left ear tube curving to junction -->
+        <path d="M19 17 Q17 36 45 39" stroke="url(#launchGrad)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+        <!-- Right ear tube curving to junction -->
+        <path d="M71 17 Q73 36 45 39" stroke="url(#launchGrad)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+        <!-- Main tube: down, then clockwise loop, ending at chest piece -->
+        <path d="M45 39 Q44 56 61 62 Q78 68 75 81 Q72 93 61 94 Q50 95 46 87"
+              stroke="url(#launchGrad)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+        <!-- Chest piece outer ring -->
+        <circle cx="39" cy="84" r="12"  stroke="url(#launchGrad)" stroke-width="5"/>
+        <!-- Chest piece inner dot -->
+        <circle cx="39" cy="84" r="4.5" fill="url(#launchGrad)"/>
+      </svg>
     </div>
 
     <!-- ══════════════════════════════════════════════ -->
