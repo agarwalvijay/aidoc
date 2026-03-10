@@ -34,8 +34,10 @@ class Settings(BaseSettings):
     google_api_key: Optional[str] = None
     google_model: str = "gemini-1.5-pro"
 
-    # TTS: set True to use OpenAI neural TTS; False forces Web Speech API on the client
+    # TTS: openai | google | browser (browser = Web Speech API, free but robotic)
     tts_enabled: bool = True
+    tts_provider: str = "openai"               # openai | google
+    google_tts_voice: str = "en-US-Neural2-F"  # any Google Cloud TTS voice name
 
     # Safety posture: conservative floors uncertain cases at specialist_soon
     conservative_mode: bool = True

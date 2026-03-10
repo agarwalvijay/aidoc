@@ -360,31 +360,68 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
 
 
 # ---------------------------------------------------------------------------
-# TTS endpoint — uses OpenAI TTS if OPENAI_API_KEY is configured.
-# Frontend probes this once; falls back to Web Speech API if unavailable.
+# TTS endpoint — provider selected by TTS_PROVIDER env var (openai | google).
+# Frontend probes this once on session start; falls back to Web Speech if 501/503.
 # ---------------------------------------------------------------------------
 
 class _TTSRequest(BaseModel):
     text: str
 
 
+async def _tts_openai(text: str) -> bytes:
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=501, detail="TTS_PROVIDER=openai but OPENAI_API_KEY not set")
+    from openai import OpenAI
+    client = OpenAI(api_key=settings.openai_api_key)
+    resp = await asyncio.to_thread(
+        lambda: client.audio.speech.create(
+            model="tts-1",
+            voice="nova",
+            input=text[:4096],
+        )
+    )
+    return resp.content
+
+
+async def _tts_google(text: str) -> bytes:
+    try:
+        from google.cloud import texttospeech as tts
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail="google-cloud-texttospeech not installed — run: pip install google-cloud-texttospeech",
+        )
+    def _call() -> bytes:
+        client = tts.TextToSpeechClient()
+        response = client.synthesize_speech(
+            input=tts.SynthesisInput(text=text[:5000]),
+            voice=tts.VoiceSelectionParams(
+                language_code="en-US",
+                name=settings.google_tts_voice,
+            ),
+            audio_config=tts.AudioConfig(
+                audio_encoding=tts.AudioEncoding.MP3,
+                speaking_rate=0.95,   # slightly slower — clearer for medical context
+                pitch=0.0,
+            ),
+        )
+        return response.audio_content
+
+    return await asyncio.to_thread(_call)
+
+
 @app.post("/api/tts")
 async def text_to_speech(request: _TTSRequest) -> Response:
     if not settings.tts_enabled:
-        raise HTTPException(status_code=501, detail="TTS disabled: TTS_ENABLED=false")
-    if not settings.openai_api_key:
-        raise HTTPException(status_code=501, detail="TTS not configured: OPENAI_API_KEY not set")
+        raise HTTPException(status_code=501, detail="TTS disabled: set TTS_ENABLED=true")
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=settings.openai_api_key)
-        tts_response = await asyncio.to_thread(
-            lambda: client.audio.speech.create(
-                model="tts-1",
-                voice="nova",
-                input=request.text[:4096],
-            )
-        )
-        return Response(content=tts_response.content, media_type="audio/mpeg")
+        if settings.tts_provider == "google":
+            audio = await _tts_google(request.text)
+        else:
+            audio = await _tts_openai(request.text)
+        return Response(content=audio, media_type="audio/mpeg")
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.error("[TTS_ERROR] %s", exc)
-        raise HTTPException(status_code=503, detail="TTS service error")
+        logger.error("[TTS_ERROR] provider=%s error=%s", settings.tts_provider, exc)
+        raise HTTPException(status_code=503, detail=f"TTS error: {exc}")
