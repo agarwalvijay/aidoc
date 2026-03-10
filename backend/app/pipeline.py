@@ -123,12 +123,16 @@ SAFETY REVIEW — check every item:
    - Fever ≥ 103°F: source must be identified; consider urgent_today
 
 3. URGENCY CALIBRATION:
-   - Freely UPGRADE when life-threatening features are present.
-   - DOWNGRADE emergency_now if the conversation contains NO evidence of: active MI/stroke/PE,
-     anaphylaxis, respiratory arrest, SpO2 < 92%, suicidal plan, cauda equina, obstetric
-     emergency. A UTI, URI, headache, rash, GI illness, or anxiety should NEVER be
-     emergency_now. If you see emergency_now without a life-threatening justification,
-     downgrade to urgent_today or specialist_soon and explain in issues_found.
+   - UPGRADE urgency only for CURRENT active symptoms indicating an emergency RIGHT NOW.
+   - Do NOT upgrade based on theoretical future progression — "UTI could become sepsis",
+     "cold could progress to pneumonia", "headache might be a tumor" are NOT grounds for
+     upgrading urgency. The patient's CURRENT presentation must have active emergency features.
+   - DOWNGRADE emergency_now if the patient's current symptoms do not include: active chest
+     pain/pressure, current respiratory distress, current facial drooping or arm weakness,
+     SpO2 < 92%, active suicidal ideation with a plan, current hemodynamic instability,
+     cauda equina signs, or active obstetric emergency.
+   - A UTI, URI, headache, rash, GI illness, anxiety, or chronic condition follow-up is
+     NEVER emergency_now based on current presentation alone.
 
 4. DRUG SAFETY (if prescription_guidance is non-empty):
    - Allergy check: no medication on the patient's allergy list
@@ -327,6 +331,16 @@ def run_assessment_pipeline(
 
     # Use critic-corrected assessment if available and valid, else fall back
     final_assessment = critic_result.get("assessment") or assessment_raw
+
+    # Flag if critic upgraded urgency to emergency_now from a lower level.
+    # apply_safety_policy uses this to apply extra skepticism to critic-driven escalations.
+    if (assessment_raw.get("urgency") != "emergency_now"
+            and final_assessment.get("urgency") == "emergency_now"):
+        final_assessment["_critic_escalated_to_emergency"] = True
+        logger.warning(
+            "[PIPELINE_CRITIC] Critic escalated to emergency_now from %s. Issues: %s",
+            assessment_raw.get("urgency"), issues,
+        )
 
     # ── Stage 3: Patient-facing writer ───────────────────────────────────
     if progress_callback:

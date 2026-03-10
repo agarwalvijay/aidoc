@@ -121,18 +121,24 @@ def apply_safety_policy(
     except ValueError:
         confidence = ConfidenceLevel.medium
 
-    # Deterministic urgency sanity check:
-    # emergency_now without high confidence is almost certainly an LLM over-escalation.
-    # True emergencies (MI, stroke, PE, suicidality) are assessed with high confidence;
-    # routine presentations incorrectly flagged emergency come through as medium/low.
-    # Note: genuine life-threatening emergencies are caught by the deterministic red_flag
-    # gate in main.py BEFORE this code runs — so reaching here means no hard red flag fired.
-    if urgency == UrgencyLevel.emergency_now and confidence != ConfidenceLevel.high:
+    # Deterministic urgency sanity check.
+    # Two cases warrant downgrading emergency_now to urgent_today:
+    #
+    # Case 1: Low/medium confidence — true emergencies are assessed with high certainty.
+    # Case 2: The critic escalated from a lower level — critic upgrades based on theoretical
+    #         future risk (e.g. "UTI could become sepsis") rather than current symptoms.
+    #         The assessment LLM's original read is more reliable for routine presentations.
+    #
+    # Note: genuine life-threatening emergencies (MI, stroke, suicidality) are caught by
+    # the deterministic red_flag gate in main.py BEFORE this code ever runs.
+    critic_escalated = bool(raw.get("_critic_escalated_to_emergency"))
+    if urgency == UrgencyLevel.emergency_now and (
+        confidence != ConfidenceLevel.high or critic_escalated
+    ):
         logger.warning(
-            "[URGENCY_SANITY] Downgrading emergency_now (confidence=%s) → urgent_today. "
-            "Reasoning: %s",
-            confidence,
-            str(raw.get("reasoning", ""))[:200],
+            "[URGENCY_SANITY] Downgrading emergency_now "
+            "(confidence=%s, critic_escalated=%s) → urgent_today. Reasoning: %s",
+            confidence, critic_escalated, str(raw.get("reasoning", ""))[:200],
         )
         urgency = UrgencyLevel.urgent_today
 
