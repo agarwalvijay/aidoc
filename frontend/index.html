@@ -1342,6 +1342,11 @@
 
           lastAiText = resultData.assistant_message || "";
           addLog("ai", lastAiText);
+
+          if (!resultData.ask_follow_up && resultData.assessment) {
+            renderAssessment(resultData.assessment);
+          }
+
           await speak(lastAiText);
 
           if (resultData.ask_follow_up) {
@@ -1353,7 +1358,6 @@
           } else {
             isSessionActive = false;
             setStatus("Assessment complete. Press New Session to start over.");
-            if (resultData.assessment) renderAssessment(resultData.assessment);
           }
         } catch (err) {
           console.error(err);
