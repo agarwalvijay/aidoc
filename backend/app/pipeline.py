@@ -305,8 +305,9 @@ def run_assessment_pipeline(
         f"PRESCRIBING POLICY: {prescribing_note}"
     )
     assessment_raw = _call_stage(invoke_fn, build_assessment_prompt(specialty), assess_input, "assess")
-    logger.info("[PIPELINE_ASSESS] urgency=%s confidence=%s",
-                assessment_raw.get("urgency"), assessment_raw.get("confidence"))
+    logger.info("[PIPELINE_ASSESS] urgency=%s confidence=%s conditions=%s",
+                assessment_raw.get("urgency"), assessment_raw.get("confidence_level"),
+                assessment_raw.get("likely_conditions"))
 
     # ── Stage 2: Safety critic ────────────────────────────────────────────
     if progress_callback:
@@ -319,8 +320,10 @@ def run_assessment_pipeline(
     critic_result = _call_stage(invoke_fn, CRITIC_SYSTEM_PROMPT, critic_input, "critic")
 
     issues = critic_result.get("issues_found", [])
-    if issues:
-        logger.info("[PIPELINE_CRITIC] Issues found: %s", issues)
+    critic_assessment = critic_result.get("assessment", {})
+    logger.info("[PIPELINE_CRITIC] urgency=%s confidence=%s issues=%s",
+                critic_assessment.get("urgency"), critic_assessment.get("confidence_level"),
+                issues)
 
     # Use critic-corrected assessment if available and valid, else fall back
     final_assessment = critic_result.get("assessment") or assessment_raw

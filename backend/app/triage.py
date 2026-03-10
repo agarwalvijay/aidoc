@@ -9,9 +9,12 @@ Its job is to:
      output safety rules (no direct prescribing, urgency floors, etc.).
 """
 
+import logging
 from typing import Any, Dict, List, Tuple
 
 from .models import ConfidenceLevel, RedFlagHit, TriageAssessment, UrgencyLevel
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def build_red_flag_assessment(red_flags: List[RedFlagHit]) -> Tuple[TriageAssessment, str]:
@@ -117,6 +120,21 @@ def apply_safety_policy(
         confidence = ConfidenceLevel(raw.get("confidence_level", "medium"))
     except ValueError:
         confidence = ConfidenceLevel.medium
+
+    # Deterministic urgency sanity check:
+    # emergency_now without high confidence is almost certainly an LLM over-escalation.
+    # True emergencies (MI, stroke, PE, suicidality) are assessed with high confidence;
+    # routine presentations incorrectly flagged emergency come through as medium/low.
+    # Note: genuine life-threatening emergencies are caught by the deterministic red_flag
+    # gate in main.py BEFORE this code runs — so reaching here means no hard red flag fired.
+    if urgency == UrgencyLevel.emergency_now and confidence != ConfidenceLevel.high:
+        logger.warning(
+            "[URGENCY_SANITY] Downgrading emergency_now (confidence=%s) → urgent_today. "
+            "Reasoning: %s",
+            confidence,
+            str(raw.get("reasoning", ""))[:200],
+        )
+        urgency = UrgencyLevel.urgent_today
 
     # Conservative mode: never allow self_care_monitor when confidence is low
     if conservative_mode and confidence == ConfidenceLevel.low:
