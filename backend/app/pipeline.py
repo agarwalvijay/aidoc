@@ -62,31 +62,37 @@ Return valid JSON only:
   "reasoning": "your differential reasoning"
 }}
 
-Urgency definitions — apply these precisely:
-  emergency_now     Life-threatening condition requiring 911 or immediate ER. Examples:
-                    suspected MI/stroke/PE, sepsis with hemodynamic instability, SpO2 < 92%,
-                    BP ≥ 180/120 with end-organ symptoms, suicidal ideation with plan or intent,
-                    cauda equina syndrome, obstetric emergency, anaphylaxis.
-                    Do NOT use for symptoms that are uncomfortable but not imminently dangerous.
+URGENCY RULES — read carefully before assigning urgency:
 
-  urgent_today      Needs evaluation same day but is not life-threatening. Examples:
-                    suspected pyelonephritis (UTI + flank pain + fever), uncontrolled BP > 160/100
-                    with symptoms, SpO2 92–95%, fever ≥ 103°F, new neurological symptoms,
-                    significant psychiatric crisis without active suicidal plan.
+  emergency_now     Reserved for immediately life-threatening conditions where calling 911
+                    RIGHT NOW is the correct action. Use ONLY for: active MI/ACS, stroke,
+                    PE, anaphylaxis with airway involvement, respiratory arrest, SpO2 < 92%,
+                    BP ≥ 180/120 with end-organ symptoms, suicidal ideation WITH a plan,
+                    cauda equina syndrome, active obstetric emergency.
+                    NEVER use for: UTI, URI, headache, rash, stomach bug, back pain,
+                    anxiety, or any condition where "see a doctor soon" is the right advice.
 
-  specialist_soon   Needs in-person evaluation within 2–5 days. Examples:
-                    uncomplicated UTI, uncomplicated URI/pharyngitis, moderate headache without
-                    red flags, stable skin rash of unclear cause, chronic condition follow-up.
+  urgent_today      Not life-threatening, but needs same-day evaluation. Examples:
+                    pyelonephritis (UTI + flank pain + fever ≥ 101°F), uncontrolled
+                    BP > 160/100 with symptoms, SpO2 92–95%, fever ≥ 103°F, significant
+                    psychiatric crisis without active plan, rapidly spreading rash with fever.
 
-  self_care_monitor High confidence benign self-limited condition. Patient is counseled on
-                    specific return precautions. Examples: mild viral URI, mild tension headache,
-                    mild contact dermatitis with clear trigger.
+  specialist_soon   Needs in-person evaluation within 2–5 days — the correct level for
+                    most acute primary care presentations. Examples: uncomplicated UTI,
+                    URI/pharyngitis, moderate headache without red flags, skin rash of
+                    unclear cause, chronic condition with recent change.
+
+  self_care_monitor High confidence benign self-limited condition with clear return
+                    precautions. Examples: mild viral URI, mild tension headache,
+                    mild contact dermatitis with known trigger.
+
+BEFORE assigning emergency_now, ask yourself: "Would I call 911 for this patient right
+now, or would I tell them to see a doctor?" If the answer is "see a doctor," use
+urgent_today or specialist_soon instead.
 
 Assessment principles:
 - Base the assessment strictly on gathered information — do not assume.
 - Abnormal vitals must be addressed even if the chief complaint seems unrelated.
-- When uncertain between urgency levels, choose the higher one — but only between adjacent
-  levels. Do not jump from self_care_monitor to emergency_now without clear justification.
 - When information is incomplete, reflect that as lower confidence.
 - Include at least 2 specific return-precaution items in care_instructions.
 - If prescribing is authorized, apply standard contraindications and allergy checks.
@@ -117,11 +123,12 @@ SAFETY REVIEW — check every item:
    - Fever ≥ 103°F: source must be identified; consider urgent_today
 
 3. URGENCY CALIBRATION:
-   - Freely UPGRADE when red flags are present.
-   - Also DOWNGRADE when clearly over-escalated: a routine uncomplicated UTI, viral URI,
-     tension headache, or mild rash should never be emergency_now. If the proposed urgency
-     is emergency_now but no life-threatening feature is present in the conversation,
-     downgrade it and explain why in issues_found.
+   - Freely UPGRADE when life-threatening features are present.
+   - DOWNGRADE emergency_now if the conversation contains NO evidence of: active MI/stroke/PE,
+     anaphylaxis, respiratory arrest, SpO2 < 92%, suicidal plan, cauda equina, obstetric
+     emergency. A UTI, URI, headache, rash, GI illness, or anxiety should NEVER be
+     emergency_now. If you see emergency_now without a life-threatening justification,
+     downgrade to urgent_today or specialist_soon and explain in issues_found.
 
 4. DRUG SAFETY (if prescription_guidance is non-empty):
    - Allergy check: no medication on the patient's allergy list
