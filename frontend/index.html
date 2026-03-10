@@ -39,6 +39,12 @@
       }
       .screen.active { display: grid; }
 
+      /* Session screen uses the full viewport — minimal chrome */
+      #sessionScreen {
+        padding: 10px 12px;
+        align-items: start;
+      }
+
       .panel {
         width: min(860px, 100%);
         border-radius: 22px;
@@ -47,6 +53,17 @@
         border: 1px solid var(--glass-border);
         box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
         padding: clamp(20px, 4vw, 40px);
+      }
+
+      /* Session panel stretches wide and fills height */
+      #sessionScreen .panel {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 16px;
+        padding: 18px 22px;
+        min-height: calc(100vh - 20px);
+        display: flex;
+        flex-direction: column;
       }
 
       /* ── Home screen ── */
@@ -240,7 +257,9 @@
         border: 1px solid rgba(146, 195, 236, 0.15);
         border-radius: 14px;
         padding: 14px 16px;
-        max-height: min(38vh, 360px);
+        flex: 1;               /* grow to fill available vertical space */
+        min-height: 160px;
+        max-height: 58vh;
         overflow-y: auto;
         font-size: 0.9rem;
         line-height: 1.55;
