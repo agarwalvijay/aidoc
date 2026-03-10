@@ -76,9 +76,11 @@ URGENCY RULES — read carefully before assigning urgency:
                     pyelonephritis (UTI + flank pain + fever ≥ 101°F), uncontrolled
                     BP > 160/100 with symptoms, SpO2 92–95%, fever ≥ 103°F, significant
                     psychiatric crisis without active plan, rapidly spreading rash with fever.
+                    NOT for: uncomplicated UTI without fever or flank pain.
 
   specialist_soon   Needs in-person evaluation within 2–5 days — the correct level for
-                    most acute primary care presentations. Examples: uncomplicated UTI,
+                    most acute primary care presentations. Examples: uncomplicated UTI
+                    (dysuria + frequency, no fever, no flank pain, no systemic symptoms),
                     URI/pharyngitis, moderate headache without red flags, skin rash of
                     unclear cause, chronic condition with recent change.
 
@@ -133,6 +135,8 @@ SAFETY REVIEW — check every item:
      cauda equina signs, or active obstetric emergency.
    - A UTI, URI, headache, rash, GI illness, anxiety, or chronic condition follow-up is
      NEVER emergency_now based on current presentation alone.
+   - Missing or unmeasured vitals lower confidence — they do NOT raise urgency. If vitals
+     were not provided, note it as a confidence limitation, not an escalation reason.
 
 4. DRUG SAFETY (if prescription_guidance is non-empty):
    - Allergy check: no medication on the patient's allergy list
