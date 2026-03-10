@@ -38,7 +38,23 @@ logger = logging.getLogger("uvicorn.error")
 # Stage prompts
 # ---------------------------------------------------------------------------
 
-def build_assessment_prompt(specialty: str) -> str:
+def build_assessment_prompt(specialty: str, prescribing_enabled: bool = False) -> str:
+    specialty_label = specialty.replace("_", " ").title()
+    if prescribing_enabled:
+        rx_instruction = (
+            '"prescription_guidance": ["Drug name dose route frequency/duration. '
+            'Key instruction. When to stop or seek care."],'
+        )
+        rx_note = (
+            "PRESCRIBING IS AUTHORIZED: populate prescription_guidance with specific "
+            "medications appropriate for this specialty and presentation. "
+            "Check allergies, drug interactions, and PMH contraindications before listing any drug. "
+            "No controlled substances. Label empiric antibiotics as empiric."
+        )
+    else:
+        rx_instruction = '"prescription_guidance": [],'
+        rx_note = "PRESCRIBING IS NOT AUTHORIZED: leave prescription_guidance as []."
+
     specialty_label = specialty.replace("_", " ").title()
     return f"""\
 You are a {specialty_label} specialist performing a clinical triage assessment.
@@ -46,6 +62,8 @@ You are a {specialty_label} specialist performing a clinical triage assessment.
 Use your medical knowledge and specialty expertise to analyze the patient profile, intake
 summary, and conversation transcript. Your sole job is structured clinical reasoning —
 do NOT write patient-facing language.
+
+{rx_note}
 
 Return valid JSON only:
 {{
@@ -56,7 +74,7 @@ Return valid JSON only:
   "confidence_note": "what supports or limits your confidence",
   "recommended_next_step": "specific, actionable instruction",
   "care_instructions": ["instruction 1", "instruction 2", "at least 2 return precautions"],
-  "prescription_guidance": [],
+  {rx_instruction}
   "sensitive_condition": false,
   "specialist_type": null,
   "reasoning": "your differential reasoning"
@@ -312,7 +330,7 @@ def run_assessment_pipeline(
         f"CONVERSATION TRANSCRIPT:\n{conversation_block}\n\n"
         f"PRESCRIBING POLICY: {prescribing_note}"
     )
-    assessment_raw = _call_stage(invoke_fn, build_assessment_prompt(specialty), assess_input, "assess")
+    assessment_raw = _call_stage(invoke_fn, build_assessment_prompt(specialty, prescribing_enabled), assess_input, "assess")
     logger.info("[PIPELINE_ASSESS] urgency=%s confidence=%s conditions=%s",
                 assessment_raw.get("urgency"), assessment_raw.get("confidence_level"),
                 assessment_raw.get("likely_conditions"))
