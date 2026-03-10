@@ -1,9 +1,18 @@
 from typing import List
 from .models import RedFlagHit
 
-# Deterministic high-sensitivity safety gate.
-# Patterns are intentionally broad — false positives are acceptable here;
-# false negatives are not.
+# Deterministic safety gate — LIFE-THREATENING patterns only.
+#
+# Philosophy: this gate exists for the narrow set of emergencies where
+# immediate action is needed BEFORE any LLM processing (MI, stroke, active
+# suicidality, resp arrest, obstetric emergency). It intentionally bypasses
+# the LLM entirely.
+#
+# Everything else — cancer alarm, sepsis, neurological nuance, drug reactions —
+# is handled by the LLM intake + independent critic stage, which has the full
+# context needed to reason correctly.
+#
+# False positives here are acceptable. False negatives are not.
 RED_FLAG_PATTERNS = {
     "cardiac": [
         "chest pain",
@@ -16,7 +25,6 @@ RED_FLAG_PATTERNS = {
         "pain in my left arm",
         "jaw pain",
         "heart attack",
-        "palpitations and chest pain",
     ],
     "stroke": [
         "face drooping",
@@ -24,73 +32,33 @@ RED_FLAG_PATTERNS = {
         "face numb",
         "sudden slurred speech",
         "slurring my words",
-        "slurring words",
         "arm weakness suddenly",
         "one side weakness",
         "one sided weakness",
         "sudden numbness",
         "sudden confusion",
-        "sudden severe headache",
         "worst headache of my life",
         "thunderclap headache",
         "sudden vision loss",
-        "vision suddenly went",
     ],
     "respiratory_emergency": [
         "cannot breathe",
         "can't breathe",
         "struggling to breathe",
-        "shortness of breath at rest",
-        "blue lips",
-        "blue fingertips",
-        "turning blue",
         "gasping for air",
         "choking",
         "throat is closing",
         "throat is swelling",
-        "allergic reaction and breathing",
+        "blue lips",
+        "blue fingertips",
     ],
     "severe_bleeding": [
         "vomiting blood",
         "throwing up blood",
-        "blood in stool",
         "black tarry stool",
-        "bright red blood from rectum",
         "coughing up blood",
-        "coughing blood",
         "heavy uncontrolled bleeding",
         "won't stop bleeding",
-    ],
-    "sepsis": [
-        "high fever and confusion",
-        "fever with confusion",
-        "fever and very low blood pressure",
-        "rapid breathing and high fever",
-        "cold clammy skin and fever",
-        "sepsis",
-    ],
-    "neurological_emergency": [
-        "seizure",
-        "having a seizure",
-        "convulsing",
-        "loss of consciousness",
-        "passed out and",
-        "unresponsive",
-        "sudden weakness in both legs",
-        "cannot move legs",
-        "loss of bladder control with back pain",
-        "loss of bowel control with back pain",
-        "saddle numbness",
-        "numbness in groin with back pain",
-    ],
-    "cancer_alarm": [
-        "unexplained weight loss",
-        "unintentional weight loss",
-        "blood in urine and back pain",
-        "persistent night sweats and weight loss",
-        "lump getting bigger",
-        "lump that is growing",
-        "painless lump",
     ],
     "suicidality": [
         "want to kill myself",
@@ -101,7 +69,6 @@ RED_FLAG_PATTERNS = {
         "want to die",
         "thoughts of ending my life",
         "harming myself",
-        "hurting myself",
         "no reason to live",
     ],
     "obstetric_emergency": [
@@ -111,6 +78,15 @@ RED_FLAG_PATTERNS = {
         "water broke",
         "baby not moving",
         "pregnant and chest pain",
+    ],
+    "neurological_emergency": [
+        "having a seizure",
+        "convulsing",
+        "loss of consciousness",
+        "unresponsive",
+        "saddle numbness",
+        "loss of bladder control with back pain",
+        "loss of bowel control with back pain",
     ],
 }
 

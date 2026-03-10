@@ -42,30 +42,6 @@ app.add_middleware(
 # Helpers
 # ---------------------------------------------------------------------------
 
-_CONDITION_OPENERS: dict[str, str] = {
-    "uri": "How long have you had these symptoms, and do you have a fever?",
-    "gi": "When did this start, and have you had any nausea, vomiting, or diarrhea?",
-    "uti": "How long have you had the burning sensation, and are you also experiencing increased frequency or urgency to urinate?",
-    "rash": "Where on your body is the rash, and how would you describe it — is it raised, flat, blistering, or scaly?",
-    "back": "Did this start suddenly or gradually, and does the pain radiate anywhere down your legs?",
-    "headache": "How quickly did the headache come on, and on a scale of 0 to 10 how severe is it right now?",
-    "mental": "Over the past two weeks, have you had little interest or pleasure in doing things you usually enjoy?",
-    "htn": "What have your recent blood pressure readings been at home, and are you taking your medications as prescribed?",
-    "dm": "How have your blood glucose readings been lately, and are you taking your diabetes medications as prescribed?",
-}
-
-_CONDITION_KEYWORDS: list[tuple[str, str]] = [
-    ("uri", ["cough", "cold", "sore throat", "runny nose", "congestion", "uri", "flu", "respiratory", "nasal"]),
-    ("gi", ["stomach", "nausea", "vomit", "diarrhea", "abdominal", "gi", "bowel", "belly", "cramp", "indigestion", "heartburn"]),
-    ("uti", ["urine", "urination", "burning", "uti", "bladder", "dysuria", "frequency", "urgency urinating"]),
-    ("rash", ["rash", "skin", "itch", "hives", "redness", "blister", "bumps on skin"]),
-    ("back", ["back pain", "back ache", "lower back", "spine", "lumbar", "back is hurting"]),
-    ("headache", ["headache", "migraine", "head pain", "head is pounding", "head hurts"]),
-    ("mental", ["anxious", "anxiety", "depressed", "depression", "mood", "mental health", "panic", "sad", "hopeless"]),
-    ("htn", ["blood pressure", "hypertension", "bp check", "htn"]),
-    ("dm", ["diabetes", "blood sugar", "glucose", "diabetic", "dm", "insulin"]),
-]
-
 
 def _check_critical_vitals(profile) -> tuple:
     """
@@ -121,30 +97,6 @@ def _check_critical_vitals(profile) -> tuple:
     return True, assessment, message
 
 
-def _classify_complaint(complaint: str) -> str:
-    lower = complaint.lower()
-    for condition, keywords in _CONDITION_KEYWORDS:
-        if any(kw in lower for kw in keywords):
-            return condition
-    return ""
-
-
-def _first_question(profile) -> str:
-    cc = (profile.chief_complaint or "").strip()
-    if not cc:
-        return "What symptoms are bringing you in today? Please describe what's been bothering you."
-
-    condition = _classify_complaint(cc)
-    opener = _CONDITION_OPENERS.get(condition)
-    if opener:
-        return f"You mentioned {cc}. {opener}"
-
-    return (
-        f"You mentioned {cc}. "
-        "How long have you been experiencing this, and how would you describe the severity on a scale of 0 to 10?"
-    )
-
-
 # ---------------------------------------------------------------------------
 # SSE helper
 # ---------------------------------------------------------------------------
@@ -194,7 +146,12 @@ async def start_session(request: StartSessionRequest) -> StartSessionResponse:
 
     # ── LLM generates the opening question from full patient context ──
     llm = get_clinician_llm()
-    first_q = _first_question(profile)  # deterministic fallback
+    cc = (profile.chief_complaint or "").strip()
+    first_q = (
+        f"I see you're here about {cc}. Can you tell me more about when this started and what it feels like?"
+        if cc else
+        "What's brought you in today? Please describe what's been bothering you."
+    )
     try:
         result = await asyncio.to_thread(
             llm.process_turn,
@@ -306,6 +263,7 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
                         invoke_fn=llm.invoke_raw,
                         prescribing_enabled=settings.prescribing_enabled,
                         progress_callback=progress_cb,
+                        specialty=session.patient_profile.specialty,
                     )
                 except Exception as exc:
                     logger.error("[PIPELINE_ERROR] session=%s error=%s", session_id, exc)

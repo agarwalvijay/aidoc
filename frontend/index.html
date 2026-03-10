@@ -99,6 +99,35 @@
       .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
       .btn-primary:hover:not(:disabled) { opacity: 0.9; }
 
+      /* ── Specialty selector ── */
+      .specialty-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 10px;
+      }
+      .specialty-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        padding: 14px 10px;
+        border-radius: 14px;
+        border: 2px solid rgba(100, 160, 210, 0.2);
+        background: var(--input-bg);
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+        text-align: center;
+        user-select: none;
+      }
+      .specialty-card:hover { border-color: rgba(101, 209, 196, 0.5); }
+      .specialty-card.selected {
+        border-color: var(--accent);
+        background: rgba(101, 209, 196, 0.08);
+      }
+      .specialty-icon { font-size: 1.6rem; line-height: 1; }
+      .specialty-name { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+      .specialty-desc { font-size: 0.72rem; color: #7aaacc; line-height: 1.4; }
+
       /* ── Onboarding form screen ── */
       .onboard-title {
         margin: 0 0 4px;
@@ -602,6 +631,48 @@
 
         <form id="onboardForm" novalidate>
 
+          <!-- Specialty selector -->
+          <div class="form-section">
+            <div class="form-section-title">Choose Your Doctor <span class="required-marker">*</span></div>
+            <div class="specialty-grid" id="specialtyGrid">
+              <div class="specialty-card selected" data-specialty="primary_care">
+                <div class="specialty-icon">🩺</div>
+                <div class="specialty-name">Primary Care</div>
+                <div class="specialty-desc">General adult medicine, any symptom</div>
+              </div>
+              <div class="specialty-card" data-specialty="cardiology">
+                <div class="specialty-icon">❤️</div>
+                <div class="specialty-name">Cardiology</div>
+                <div class="specialty-desc">Heart, chest pain, blood pressure</div>
+              </div>
+              <div class="specialty-card" data-specialty="dermatology">
+                <div class="specialty-icon">🔬</div>
+                <div class="specialty-name">Dermatology</div>
+                <div class="specialty-desc">Skin, rashes, lesions</div>
+              </div>
+              <div class="specialty-card" data-specialty="psychiatry">
+                <div class="specialty-icon">🧠</div>
+                <div class="specialty-name">Mental Health</div>
+                <div class="specialty-desc">Mood, anxiety, depression</div>
+              </div>
+              <div class="specialty-card" data-specialty="pediatrics">
+                <div class="specialty-icon">👶</div>
+                <div class="specialty-name">Pediatrics</div>
+                <div class="specialty-desc">Children's health, ages 0–17</div>
+              </div>
+              <div class="specialty-card" data-specialty="orthopedics">
+                <div class="specialty-icon">🦴</div>
+                <div class="specialty-name">Orthopedics</div>
+                <div class="specialty-desc">Joints, spine, injuries</div>
+              </div>
+              <div class="specialty-card" data-specialty="gastroenterology">
+                <div class="specialty-icon">🫀</div>
+                <div class="specialty-name">Gastroenterology</div>
+                <div class="specialty-desc">Stomach, bowel, GI symptoms</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Demographics -->
           <div class="form-section">
             <div class="form-section-title">About You</div>
@@ -730,7 +801,7 @@
     <main id="sessionScreen" class="screen">
       <section class="panel">
         <div class="session-header">
-          <h2>AI Doctor <span id="voiceBadge"></span></h2>
+          <h2>AI Doctor — <span id="specialtyLabel">Primary Care</span> <span id="voiceBadge"></span></h2>
           <button id="newSessionBtn" class="btn-small">New Session</button>
         </div>
 
@@ -817,6 +888,17 @@
       const onboardScreen = document.getElementById("onboardScreen");
       const sessionScreen = document.getElementById("sessionScreen");
       const launchOverlay = document.getElementById("launchOverlay");
+
+      // ── Specialty selection ──
+      let selectedSpecialty = "primary_care";
+
+      document.querySelectorAll(".specialty-card").forEach(card => {
+        card.addEventListener("click", () => {
+          document.querySelectorAll(".specialty-card").forEach(c => c.classList.remove("selected"));
+          card.classList.add("selected");
+          selectedSpecialty = card.dataset.specialty;
+        });
+      });
 
       // ── Session state ──
       let sessionId       = null;
@@ -1345,6 +1427,13 @@
         panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
 
+      const SPECIALTY_LABELS = {
+        primary_care: "Primary Care", cardiology: "Cardiology",
+        dermatology: "Dermatology", psychiatry: "Mental Health",
+        pediatrics: "Pediatrics", orthopedics: "Orthopedics",
+        gastroenterology: "Gastroenterology",
+      };
+
       // ── Session start ──
       async function beginSession(profile) {
         clearPending();
@@ -1356,6 +1445,10 @@
         isListening     = false;
         useTextMode     = false;
         lastAiText      = "";
+
+        // Update specialty label in header
+        document.getElementById("specialtyLabel").textContent =
+          SPECIALTY_LABELS[profile.specialty] || profile.specialty;
 
         // Reset UI
         document.getElementById("conversationLog").innerHTML = "";
@@ -1443,6 +1536,7 @@
 
         const profile = {
           name, age, sex, pregnant,
+          specialty: selectedSpecialty,
           chief_complaint: cc,
           pmh_conditions: pmhChecked,
           current_medications: meds,
@@ -1482,6 +1576,10 @@
         if ("speechSynthesis" in window) speechSynthesis.cancel();
         isSessionActive = false;
         document.getElementById("beginBtn").disabled = false;
+        // Re-select the current specialty card so onboarding state is clean
+        document.querySelectorAll(".specialty-card").forEach(c => {
+          c.classList.toggle("selected", c.dataset.specialty === selectedSpecialty);
+        });
         sessionScreen.classList.remove("active");
         onboardScreen.classList.add("active");
       });

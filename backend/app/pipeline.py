@@ -38,72 +38,84 @@ logger = logging.getLogger("uvicorn.error")
 # Stage prompts
 # ---------------------------------------------------------------------------
 
-ASSESSMENT_SYSTEM_PROMPT = """\
-You are a clinical reasoning engine performing evidence-based triage assessment.
-Your sole job is structured clinical reasoning — do NOT write patient-facing language.
+def build_assessment_prompt(specialty: str) -> str:
+    specialty_label = specialty.replace("_", " ").title()
+    return f"""\
+You are a {specialty_label} specialist performing a clinical triage assessment.
 
-Given the patient profile, the completed intake summary, and the conversation
-transcript, produce a structured triage assessment.
+Use your medical knowledge and specialty expertise to analyze the patient profile, intake
+summary, and conversation transcript. Your sole job is structured clinical reasoning —
+do NOT write patient-facing language.
 
 Return valid JSON only:
-{
-  "likely_conditions": ["most likely", "second", "third"],
+{{
+  "likely_conditions": ["most likely", "second most likely", "third if applicable"],
   "primary_impression": "brief clinical impression with key supporting evidence",
   "urgency": "emergency_now|urgent_today|specialist_soon|self_care_monitor",
   "confidence_level": "high|medium|low",
-  "confidence_note": "what supports or limits confidence",
+  "confidence_note": "what supports or limits your confidence",
   "recommended_next_step": "specific, actionable instruction",
-  "care_instructions": ["...", "..."],
-  "prescription_guidance": ["Drug name dose route frequency duration. Key instruction. When to stop/seek care."],
+  "care_instructions": ["instruction 1", "instruction 2", "at least 2 return precautions"],
+  "prescription_guidance": [],
   "sensitive_condition": false,
   "specialist_type": null,
-  "reasoning": "brief differential reasoning"
-}
+  "reasoning": "your differential reasoning"
+}}
 
-Rules:
-- Base the assessment strictly on gathered information; do not assume
-- Abnormal vitals must be addressed in the assessment even if the chief complaint seems unrelated
-- When information is incomplete, reflect that as lower confidence
-- When uncertain between urgency levels, choose the higher one
-- If prescribing is not authorized, leave prescription_guidance as []
-- If prescribing is authorized, check allergies and drug interactions before listing any medication
-
-Urgency thresholds:
-  emergency_now    — red flags, suspected MI/stroke/PE/sepsis/suicidality, SpO2 < 92%, BP ≥ 180/120
-  urgent_today     — severe/worsening symptoms, suspected pyelonephritis, uncontrolled BP > 160/100,
-                     HR > 120, significant mood symptoms, new neuro symptoms
-  specialist_soon  — needs in-person evaluation within 2-5 days
-  self_care_monitor — high confidence benign self-limited condition with clear return precautions
-
-Every assessment must include at least 2 specific return-precaution items in care_instructions.
+Assessment principles:
+- Base the assessment strictly on gathered information — do not assume.
+- Abnormal vitals must be addressed even if the chief complaint seems unrelated.
+- When uncertain between urgency levels, choose the higher one.
+- When information is incomplete, reflect that as lower confidence.
+- Include at least 2 specific return-precaution items in care_instructions.
+- If prescribing is authorized, apply standard contraindications and allergy checks.
 """
 
-CRITIC_SYSTEM_PROMPT = """\
-You are a senior emergency physician performing a mandatory safety review of a
-triage assessment before it is delivered to the patient. Your role is quality
-control — catch errors before they cause harm.
 
-Review the proposed assessment for:
-1. Missed red flags — does any symptom in the conversation warrant emergency escalation?
-2. Vital sign alignment — does the assessment adequately address abnormal vitals?
-   If BP ≥ 160/100 or HR > 120 were recorded, the assessment must address this.
-3. Urgency appropriateness — is the urgency level justified by the clinical data?
-   You may UPGRADE urgency but require strong evidence to DOWNGRADE.
-4. Prescription safety — for every medication in prescription_guidance, verify:
-   - Not on the patient's allergy list
-   - No significant interaction with current medications
-   - No contraindication from PMH (NSAIDs + peptic ulcer, nitrofurantoin + renal failure, etc.)
-5. Confidence calibration — is the stated confidence honest given what was gathered?
-6. Sensitive condition detection — cancer alarm symptoms, mental health crisis, obstetric
-   emergencies should be flagged with sensitive_condition=true and specialist_type set.
+CRITIC_SYSTEM_PROMPT = """\
+You are a senior emergency physician performing a mandatory independent safety review of a
+triage assessment before it reaches the patient. Your job is to catch errors that could harm.
+
+SAFETY REVIEW — check every item:
+
+1. MISSED EMERGENCIES — does ANY part of the conversation suggest:
+   - Cardiac: chest pain/pressure/tightness, arm/jaw pain, diaphoresis with chest symptoms
+   - Stroke: sudden facial drooping, arm weakness, speech difficulty, worst-ever headache
+   - Pulmonary embolism: sudden dyspnea + pleuritic chest pain + unilateral leg swelling
+   - Sepsis: fever + altered mental status, hypotension, or extreme tachycardia
+   - Suicidality: thoughts of self-harm or ending life with plan or intent
+   - Cauda equina: back pain + saddle numbness + bowel/bladder dysfunction
+   - Obstetric emergency: pregnant + severe abdominal pain or significant bleeding
+   - Anaphylaxis: allergic reaction + throat swelling or breathing difficulty
+   → Any of the above must be urgency: emergency_now
+
+2. VITAL SIGN ALIGNMENT — abnormal vitals must be reflected in urgency:
+   - BP ≥ 180/120: emergency_now
+   - BP ≥ 160/100 or HR > 120: at minimum urgent_today; explain in assessment
+   - SpO2 < 92%: emergency_now
+   - Fever ≥ 103°F: source must be identified; consider urgent_today
+
+3. URGENCY CALIBRATION — freely UPGRADE; require strong evidence to DOWNGRADE.
+
+4. DRUG SAFETY (if prescription_guidance is non-empty):
+   - Allergy check: no medication on the patient's allergy list
+   - Drug interactions: flag significant interactions with current medications
+   - PMH contraindications: NSAIDs + peptic ulcer/renal failure, nitrofurantoin + CKD,
+     quinolones + pregnancy, aspirin + children, TMP-SMX + sulfa allergy/first trimester
+   - No controlled substances
+
+5. CONFIDENCE HONESTY — is confidence_level honest given what was gathered?
+
+6. SENSITIVE CONDITIONS — mental health crisis, cancer alarm symptoms, obstetric concerns,
+   HIV/STI disclosures → set sensitive_condition: true and specialist_type appropriately.
 
 Return valid JSON only:
 {
-  "issues_found": ["description of each issue you corrected"],
-  "assessment": { ...final corrected assessment, identical structure to input (same field names: likely_conditions, confidence_level, confidence_note, reasoning, etc.)... }
+  "issues_found": ["description of each issue corrected — empty list if none"],
+  "assessment": { ...complete corrected assessment using identical field names to input... }
 }
 
-If no issues: return issues_found: [] and assessment identical to the input.
+If no issues: issues_found: [], assessment identical to input.
 If issues found: correct them in the assessment and explain each in issues_found.
 """
 
@@ -228,6 +240,7 @@ def run_assessment_pipeline(
     invoke_fn: Callable[[str, List[Dict]], str],
     prescribing_enabled: bool = False,
     progress_callback: Optional[Callable[[str, str], None]] = None,
+    specialty: str = "primary_care",
 ) -> Tuple[Dict[str, Any], str]:
     """
     Run the 3-stage assessment pipeline and return (assessment_dict, patient_message).
@@ -258,7 +271,7 @@ def run_assessment_pipeline(
         f"CONVERSATION TRANSCRIPT:\n{conversation_block}\n\n"
         f"PRESCRIBING POLICY: {prescribing_note}"
     )
-    assessment_raw = _call_stage(invoke_fn, ASSESSMENT_SYSTEM_PROMPT, assess_input, "assess")
+    assessment_raw = _call_stage(invoke_fn, build_assessment_prompt(specialty), assess_input, "assess")
     logger.info("[PIPELINE_ASSESS] urgency=%s confidence=%s",
                 assessment_raw.get("urgency"), assessment_raw.get("confidence"))
 

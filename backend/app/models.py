@@ -38,6 +38,7 @@ class PatientProfile(BaseModel):
     age: Optional[int] = Field(None, ge=0, le=120)
     sex: Optional[Sex] = None
     pregnant: Optional[bool] = None
+    specialty: str = "primary_care"
     chief_complaint: Optional[str] = None
     pmh_conditions: List[str] = Field(default_factory=list)
     current_medications: List[str] = Field(default_factory=list)
