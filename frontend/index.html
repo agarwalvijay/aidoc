@@ -938,6 +938,7 @@
       // ── TTS state ──
       // null = unknown, true = available, false = not available
       let backendTtsAvailable = null;
+      let backendTtsProvider = "openai"; // updated from /api/health
 
       // ── Helpers ──
       function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -995,7 +996,7 @@
         // Update badge
         const badge = document.getElementById("voiceBadge");
         if (backendTtsAvailable) {
-          badge.textContent = "OpenAI voice";
+          badge.textContent = backendTtsProvider === "google" ? "Google TTS" : "OpenAI voice";
         } else if (preferredVoice) {
           const isNeural = /online|natural|enhanced|premium|neural/i.test(preferredVoice.name);
           badge.textContent = isNeural ? "neural voice" : preferredVoice.name.split(" ").slice(0,2).join(" ");
@@ -1010,6 +1011,12 @@
       // ── Backend TTS probe ──
       async function probeBackendTts() {
         try {
+          // Read provider from health first so the badge shows the correct label
+          const h = await fetch(`${API}/api/health`);
+          if (h.ok) {
+            const info = await h.json();
+            if (info.tts && info.tts !== "web_speech") backendTtsProvider = info.tts;
+          }
           const r = await fetch(`${API}/api/tts`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

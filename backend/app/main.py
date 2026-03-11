@@ -117,7 +117,7 @@ async def health() -> dict:
         "service": settings.app_name,
         "env": settings.app_env,
         "llm": get_llm_status(),
-        "tts": "openai" if (settings.tts_enabled and settings.openai_api_key) else "web_speech",
+        "tts": settings.tts_provider if settings.tts_enabled else "web_speech",
     }
 
 
