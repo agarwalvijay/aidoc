@@ -454,20 +454,33 @@
       .urgency-soon      { background: #5a4a00; color: #fff4b0; }
       .urgency-monitor   { background: #0a3d22; color: #b8f5d0; }
 
-      .assessment-body {
+      /* Grid layout */
+      .assessment-grid {
         background: rgba(8, 18, 40, 0.75);
-        padding: 16px 18px;
+        padding: 14px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
       }
-      .assessment-section { margin-bottom: 14px; }
-      .assessment-section:last-child { margin-bottom: 0; }
-      .assessment-section-title {
-        font-size: 0.72rem;
+      @media (max-width: 600px) {
+        .assessment-grid { grid-template-columns: 1fr; }
+      }
+      .assessment-block {
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 10px;
+        padding: 12px 14px;
+      }
+      .assessment-block.full-width { grid-column: 1 / -1; }
+      .block-label {
+        font-size: 0.7rem;
         font-weight: 700;
         letter-spacing: 0.1em;
         text-transform: uppercase;
         color: #6ab0d4;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
       }
+
       .condition-pills { display: flex; flex-wrap: wrap; gap: 7px; }
       .condition-pill {
         background: rgba(40, 80, 140, 0.6);
@@ -476,34 +489,34 @@
         padding: 4px 13px;
         font-size: 0.83rem;
       }
-      .next-step-box {
-        background: rgba(30, 60, 110, 0.5);
-        border-left: 3px solid var(--accent-2);
-        border-radius: 0 8px 8px 0;
-        padding: 10px 14px;
+
+      #nextStepBox {
         font-size: 0.9rem;
-        line-height: 1.5;
+        line-height: 1.6;
+        color: #c8deff;
+        border-left: 3px solid var(--accent-2);
+        padding-left: 10px;
       }
-      .reasoning-box {
-        background: rgba(20, 40, 30, 0.5);
-        border-left: 3px solid #4caf7d;
-        border-radius: 0 8px 8px 0;
-        padding: 12px 14px;
-        font-size: 0.88rem;
+
+      #reasoningBox {
+        font-size: 0.86rem;
         line-height: 1.6;
         color: #c8e8d8;
         font-style: italic;
+        border-left: 3px solid #4caf7d;
+        padding-left: 10px;
       }
+
       .care-list {
         list-style: none;
         margin: 0;
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 6px;
       }
       .care-list li {
-        font-size: 0.86rem;
+        font-size: 0.85rem;
         padding-left: 18px;
         position: relative;
         line-height: 1.5;
@@ -515,6 +528,8 @@
         left: 4px;
         color: var(--accent);
       }
+      #rxList li { color: #ffe5c0; }
+      #rxList li::before { color: #e09a30; }
 
       /* ── Launch overlay ── */
       .launch-overlay {
@@ -853,27 +868,34 @@
         <!-- Assessment result panel -->
         <div id="assessmentPanel">
           <div id="urgencyHeader" class="urgency-header"></div>
-          <div class="assessment-body">
-            <div class="assessment-section" id="conditionsSection" style="display:none;">
-              <div class="assessment-section-title">Possible Conditions</div>
+          <div class="assessment-grid">
+
+            <!-- Row 1: Conditions + Next Step -->
+            <div class="assessment-block" id="conditionsSection" style="display:none;">
+              <div class="block-label">Possible Conditions</div>
               <div class="condition-pills" id="conditionPills"></div>
             </div>
-            <div class="assessment-section" id="reasoningSection" style="display:none;">
-              <div class="assessment-section-title">Why this assessment?</div>
-              <div class="reasoning-box" id="reasoningBox"></div>
+            <div class="assessment-block" id="nextStepSection">
+              <div class="block-label">Recommended Next Step</div>
+              <div id="nextStepBox"></div>
             </div>
-            <div class="assessment-section">
-              <div class="assessment-section-title">Recommended Next Step</div>
-              <div class="next-step-box" id="nextStepBox"></div>
+
+            <!-- Row 2: Why this assessment — full width -->
+            <div class="assessment-block full-width" id="reasoningSection" style="display:none;">
+              <div class="block-label">Why This Assessment</div>
+              <div id="reasoningBox"></div>
             </div>
-            <div class="assessment-section" id="careSection" style="display:none;">
-              <div class="assessment-section-title">Care &amp; Watch-outs</div>
+
+            <!-- Row 3: Care instructions + Medication guidance -->
+            <div class="assessment-block" id="careSection" style="display:none;">
+              <div class="block-label">Care &amp; Watch-outs</div>
               <ul class="care-list" id="careList"></ul>
             </div>
-            <div class="assessment-section" id="rxSection" style="display:none;">
-              <div class="assessment-section-title">Medication Guidance (confirm with your clinician)</div>
+            <div class="assessment-block" id="rxSection" style="display:none;">
+              <div class="block-label">Medication Guidance — confirm with your clinician</div>
               <ul class="care-list" id="rxList"></ul>
             </div>
+
           </div>
         </div>
       </section>
@@ -1410,7 +1432,8 @@
 
         const careList = document.getElementById("careList");
         careList.innerHTML = "";
-        if (a.care_instructions && a.care_instructions.length) {
+        const hasCare = a.care_instructions && a.care_instructions.length;
+        if (hasCare) {
           a.care_instructions.forEach(c => {
             const li = document.createElement("li"); li.textContent = c;
             careList.appendChild(li);
@@ -1420,13 +1443,20 @@
 
         const rxList = document.getElementById("rxList");
         rxList.innerHTML = "";
-        if (a.prescription_guidance && a.prescription_guidance.length) {
+        const hasRx = a.prescription_guidance && a.prescription_guidance.length;
+        if (hasRx) {
           a.prescription_guidance.forEach(r => {
             const li = document.createElement("li"); li.textContent = r;
             rxList.appendChild(li);
           });
           document.getElementById("rxSection").style.display = "block";
         }
+
+        // Span full width if only one of care/rx is shown
+        const careEl = document.getElementById("careSection");
+        const rxEl   = document.getElementById("rxSection");
+        if (hasCare && !hasRx) careEl.classList.add("full-width");
+        if (hasRx && !hasCare) rxEl.classList.add("full-width");
 
         panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
@@ -1461,6 +1491,8 @@
         document.getElementById("reasoningSection").style.display  = "none";
         document.getElementById("careSection").style.display       = "none";
         document.getElementById("rxSection").style.display         = "none";
+        document.getElementById("careSection").classList.remove("full-width");
+        document.getElementById("rxSection").classList.remove("full-width");
         document.getElementById("textInputRow").style.display  = "none";
         document.getElementById("modeToggle").style.display    = "none";
         resetProgress();
