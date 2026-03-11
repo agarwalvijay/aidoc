@@ -110,10 +110,16 @@ BEFORE assigning emergency_now, ask yourself: "Would I call 911 for this patient
 now, or would I tell them to see a doctor?" If the answer is "see a doctor," use
 urgent_today or specialist_soon instead.
 
+BEFORE assigning urgent_today for a UTI presentation: does the patient have fever ≥ 101°F
+AND flank/back pain suggesting kidney involvement? If both are absent, use specialist_soon —
+uncomplicated UTI (burning, frequency, urgency without systemic symptoms) is NEVER urgent_today.
+
 Assessment principles:
 - Base the assessment strictly on gathered information — do not assume.
 - Abnormal vitals must be addressed even if the chief complaint seems unrelated.
 - When information is incomplete, reflect that as lower confidence.
+- confidence_level is REQUIRED — always output "high", "medium", or "low" (never null or omit).
+- Missing vitals lower confidence; they do NOT raise urgency.
 - Include at least 2 specific return-precaution items in care_instructions.
 - If prescribing is authorized, apply standard contraindications and allergy checks.
 """
