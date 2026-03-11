@@ -1013,7 +1013,7 @@
           const r = await fetch(`${API}/api/tts`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: " " }),
+            body: JSON.stringify({ text: "Hello." }),
           });
           backendTtsAvailable = r.ok;
         } catch (_) {

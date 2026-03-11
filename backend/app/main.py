@@ -372,11 +372,14 @@ async def _tts_google(text: str) -> bytes:
 async def text_to_speech(request: _TTSRequest) -> Response:
     if not settings.tts_enabled:
         raise HTTPException(status_code=501, detail="TTS disabled: set TTS_ENABLED=true")
+    text = request.text.strip()
+    if not text:
+        return Response(content=b"", media_type="audio/mpeg")
     try:
         if settings.tts_provider == "google":
-            audio = await _tts_google(request.text)
+            audio = await _tts_google(text)
         else:
-            audio = await _tts_openai(request.text)
+            audio = await _tts_openai(text)
         return Response(content=audio, media_type="audio/mpeg")
     except HTTPException:
         raise
