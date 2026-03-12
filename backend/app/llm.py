@@ -500,7 +500,8 @@ class LangChainClinicianLLM:
                     model=settings.openai_model,
                     temperature=0.1,
                     api_key=settings.openai_api_key,
-                    request_timeout=45,
+                    request_timeout=30,
+                    max_retries=0,
                     model_kwargs=json_kwargs,
                 )
             if provider == "deepseek":
@@ -511,7 +512,8 @@ class LangChainClinicianLLM:
                     temperature=0.1,
                     api_key=settings.deepseek_api_key,
                     base_url=settings.deepseek_base_url,
-                    request_timeout=45,
+                    request_timeout=30,
+                    max_retries=0,
                     model_kwargs=json_kwargs,
                 )
             if not settings.groq_api_key:
@@ -521,7 +523,8 @@ class LangChainClinicianLLM:
                 temperature=0.1,
                 api_key=settings.groq_api_key,
                 base_url=settings.groq_base_url,
-                request_timeout=45,
+                request_timeout=30,
+                max_retries=0,
                 model_kwargs=json_kwargs,
             )
 

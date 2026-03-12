@@ -219,7 +219,7 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
                     conversation=session.messages,
                     force_assess=force_assess,
                 ),
-                timeout=60,  # 60s for a single intake turn
+                timeout=35,  # 35s for a single intake turn (LangChain timeout is 30s)
             )
         except asyncio.TimeoutError:
             logger.error("[LLM_TIMEOUT] session=%s intake turn exceeded 60s", session_id)
@@ -273,7 +273,7 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
                             progress_callback=progress_cb,
                             specialty=session.patient_profile.specialty,
                         ),
-                        timeout=120,  # 2 min hard ceiling — prevents indefinite hang
+                        timeout=100,  # 3 pipeline stages × 30s each + buffer
                     )
                 except asyncio.TimeoutError:
                     logger.error("[PIPELINE_TIMEOUT] session=%s pipeline exceeded 120s", session_id)
