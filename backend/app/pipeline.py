@@ -365,6 +365,7 @@ def run_assessment_pipeline(
     if crit_rank > orig_rank:
         final_assessment["_critic_escalated"] = True
         final_assessment["_critic_escalated_from"] = orig_urgency
+        final_assessment["_assessment_confidence"] = assessment_raw.get("confidence_level", "medium")
         if crit_urgency == "emergency_now":
             final_assessment["_critic_escalated_to_emergency"] = True
         logger.warning(

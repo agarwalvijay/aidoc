@@ -148,7 +148,15 @@ def apply_safety_policy(
     # revert to the original assessment urgency. High-confidence assessment + critic
     # upgrade almost always means the critic escalated on missing info, not on
     # present clinical features.
-    if critic_escalated and confidence == ConfidenceLevel.high:
+    # Use the original assessment confidence (stored in pipeline) — the critic may
+    # have also lowered confidence to manufacture justification for the upgrade.
+    orig_confidence_str = raw.get("_assessment_confidence")
+    try:
+        orig_confidence = ConfidenceLevel(orig_confidence_str) if orig_confidence_str else confidence
+    except ValueError:
+        orig_confidence = confidence
+
+    if critic_escalated and orig_confidence == ConfidenceLevel.high:
         orig = raw.get("_critic_escalated_from", "specialist_soon")
         try:
             reverted = UrgencyLevel(orig)
