@@ -96,15 +96,19 @@ URGENCY RULES — read carefully before assigning urgency:
                     psychiatric crisis without active plan, rapidly spreading rash with fever.
                     NOT for: uncomplicated UTI without fever or flank pain.
 
-  specialist_soon   Needs in-person evaluation within 2–5 days — the correct level for
-                    most acute primary care presentations. Examples: uncomplicated UTI
-                    (dysuria + frequency, no fever, no flank pain, no systemic symptoms),
-                    URI/pharyngitis, moderate headache without red flags, skin rash of
-                    unclear cause, chronic condition with recent change.
+  specialist_soon   Needs in-person evaluation within 2–5 days. Use when the diagnosis
+                    is uncertain and in-person exam would change management. Examples:
+                    pharyngitis that may be strep (needs swab), uncomplicated UTI,
+                    moderate headache without red flags, rash of unclear cause,
+                    URI with fever ≥ 100.4°F, URI lasting > 10 days or worsening after 7.
 
-  self_care_monitor High confidence benign self-limited condition with clear return
-                    precautions. Examples: mild viral URI, mild tension headache,
-                    mild contact dermatitis with known trigger.
+  self_care_monitor High confidence benign self-limited condition where OTC care and
+                    watchful waiting is genuinely the right advice. Use when you are
+                    confident and an in-person visit would not change management.
+                    Examples: mild viral URI / common cold (clear viral prodrome, no fever,
+                    mild symptoms ≤ 7 days, no complicating features), mild tension headache,
+                    mild contact dermatitis with known trigger, mild GI bug resolving.
+                    A mild cold does NOT need a clinician visit — self_care_monitor is correct.
 
 BEFORE assigning emergency_now, ask yourself: "Would I call 911 for this patient right
 now, or would I tell them to see a doctor?" If the answer is "see a doctor," use
@@ -113,6 +117,11 @@ urgent_today or specialist_soon instead.
 BEFORE assigning urgent_today for a UTI presentation: does the patient have fever ≥ 101°F
 AND flank/back pain suggesting kidney involvement? If both are absent, use specialist_soon —
 uncomplicated UTI (burning, frequency, urgency without systemic symptoms) is NEVER urgent_today.
+
+BEFORE assigning specialist_soon for a URI: does the patient have fever ≥ 100.4°F, symptoms
+> 10 days, or features suggesting strep (severe throat, exudate, no cough)? If none of those
+apply, use self_care_monitor — a mild cold with clear viral symptoms needs home care, not a
+clinician visit.
 
 Assessment principles:
 - Base the assessment strictly on gathered information — do not assume.
