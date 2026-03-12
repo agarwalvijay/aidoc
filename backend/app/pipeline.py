@@ -95,6 +95,8 @@ URGENCY — apply this decision framework to any condition:
                     Yes if: high fever with systemic symptoms, rapidly worsening course,
                     significant vital sign abnormality, or a presentation where waiting
                     24 hours carries meaningful clinical risk.
+                    No if: symptoms are mild, patient is maintaining normal activities,
+                    and no feature suggests deterioration is likely within 24 hours.
 
   specialist_soon   "Would an in-person exam, test, or procedure change what I recommend,
                     and can it safely wait 2–5 days?"
