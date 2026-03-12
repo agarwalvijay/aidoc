@@ -80,48 +80,31 @@ Return valid JSON only:
   "reasoning": "your differential reasoning"
 }}
 
-URGENCY RULES — read carefully before assigning urgency:
+URGENCY — apply this decision framework to any condition:
 
-  emergency_now     Reserved for immediately life-threatening conditions where calling 911
-                    RIGHT NOW is the correct action. Use ONLY for: active MI/ACS, stroke,
-                    PE, anaphylaxis with airway involvement, respiratory arrest, SpO2 < 92%,
-                    BP ≥ 180/120 with end-organ symptoms, suicidal ideation WITH a plan,
-                    cauda equina syndrome, active obstetric emergency.
-                    NEVER use for: UTI, URI, headache, rash, stomach bug, back pain,
-                    anxiety, or any condition where "see a doctor soon" is the right advice.
+  Ask one question per tier, working downward. Use the first tier where the answer is yes.
 
-  urgent_today      Not life-threatening, but needs same-day evaluation. Examples:
-                    pyelonephritis (UTI + flank pain + fever ≥ 101°F), uncontrolled
-                    BP > 160/100 with symptoms, SpO2 92–95%, fever ≥ 103°F, significant
-                    psychiatric crisis without active plan, rapidly spreading rash with fever.
-                    NOT for: uncomplicated UTI without fever or flank pain.
+  emergency_now     "Would I call 911 for this patient right now?"
+                    Only yes if the patient has an active, immediately life-threatening
+                    condition — hemodynamic instability, airway compromise, active stroke
+                    or MI symptoms, SpO2 < 92%, suicidal ideation with a plan.
+                    If the right advice is "see a doctor," this is not emergency_now.
 
-  specialist_soon   Needs in-person evaluation within 2–5 days. Use when the diagnosis
-                    is uncertain and in-person exam would change management. Examples:
-                    pharyngitis that may be strep (needs swab), uncomplicated UTI,
-                    moderate headache without red flags, rash of unclear cause,
-                    URI with fever ≥ 100.4°F, URI lasting > 10 days or worsening after 7.
+  urgent_today      "Are there active features that most clinicians would want evaluated
+                    today — not tomorrow, not in 2 days?"
+                    Yes if: high fever with systemic symptoms, rapidly worsening course,
+                    significant vital sign abnormality, or a presentation where waiting
+                    24 hours carries meaningful clinical risk.
 
-  self_care_monitor High confidence benign self-limited condition where OTC care and
-                    watchful waiting is genuinely the right advice. Use when you are
-                    confident and an in-person visit would not change management.
-                    Examples: mild viral URI / common cold (clear viral prodrome, no fever,
-                    mild symptoms ≤ 7 days, no complicating features), mild tension headache,
-                    mild contact dermatitis with known trigger, mild GI bug resolving.
-                    A mild cold does NOT need a clinician visit — self_care_monitor is correct.
+  specialist_soon   "Would an in-person exam, test, or procedure change what I recommend,
+                    and can it safely wait 2–5 days?"
+                    Yes if: the diagnosis is uncertain and needs confirmation, a swab or
+                    lab would guide treatment, or the patient needs hands-on evaluation.
 
-BEFORE assigning emergency_now, ask yourself: "Would I call 911 for this patient right
-now, or would I tell them to see a doctor?" If the answer is "see a doctor," use
-urgent_today or specialist_soon instead.
-
-BEFORE assigning urgent_today for a UTI presentation: does the patient have fever ≥ 101°F
-AND flank/back pain suggesting kidney involvement? If both are absent, use specialist_soon —
-uncomplicated UTI (burning, frequency, urgency without systemic symptoms) is NEVER urgent_today.
-
-BEFORE assigning specialist_soon for a URI: does the patient have fever ≥ 100.4°F, symptoms
-> 10 days, or features suggesting strep (severe throat, exudate, no cough)? If none of those
-apply, use self_care_monitor — a mild cold with clear viral symptoms needs home care, not a
-clinician visit.
+  self_care_monitor "Would a clinician visit change what I recommend?"
+                    If the honest answer is no — OTC care, rest, and watchful waiting IS
+                    the right management — use self_care_monitor. Do not send patients to
+                    a clinician when there is nothing a clinician would add.
 
 Assessment principles:
 - Base the assessment strictly on gathered information — do not assume.
