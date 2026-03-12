@@ -263,7 +263,7 @@ def _format_profile_block(profile: PatientProfile) -> str:
     if profile.spo2 is not None:
         flag = "  ⚠ LOW" if profile.spo2 < 95 else ""
         vitals.append(f"SpO2 {profile.spo2}%{flag}")
-    lines.append(f"Vitals: {', '.join(vitals) or 'not measured'}")
+    lines.append(f"Vitals: {', '.join(vitals) if vitals else 'not captured at registration — check conversation transcript'}")
     return "\n".join(lines)
 
 

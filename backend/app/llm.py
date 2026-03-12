@@ -209,7 +209,7 @@ def _format_profile(profile: PatientProfile) -> str:
     if vital_parts:
         lines.append(f"Vitals at intake:\n  " + "\n  ".join(vital_parts))
     else:
-        lines.append("Vitals at intake: Not measured")
+        lines.append("Vitals at intake: Not captured in registration — if the patient mentions vitals during the conversation, use those values")
 
     return "\n".join(lines)
 
