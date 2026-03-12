@@ -334,22 +334,29 @@
       const decoder = new TextDecoder();
       let buffer = "";
       let resultData = null;
+      let streamError = null;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop();
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const evt = JSON.parse(line.slice(6));
-            if (evt.type === "result") resultData = evt.data;
-          } catch (_) {}
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop();
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const evt = JSON.parse(line.slice(6));
+              if (evt.type === "result") resultData = evt.data;
+              if (evt.type === "error") streamError = evt.message;
+            } catch (_) {}
+          }
         }
+      } catch (readErr) {
+        streamError = readErr.message;
       }
+      if (streamError && !resultData) throw new Error(`Server error: ${streamError}`);
       return resultData;
     }
 

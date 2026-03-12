@@ -188,6 +188,7 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
     red_flags = detect_red_flags(all_user_text)
 
     async def stream():
+      try:
         # ── Hard gate: deterministic red-flag check ──
         if red_flags:
             assessment, assistant_message = build_red_flag_assessment(red_flags)
@@ -309,6 +310,10 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
             assessment=assessment,
         )
         yield _sse({"type": "result", "data": resp.model_dump()})
+
+      except Exception as exc:
+        logger.error("[STREAM_ERROR] session=%s error=%s", session_id, exc, exc_info=True)
+        yield _sse({"type": "error", "message": str(exc)})
 
     return StreamingResponse(
         stream(),
