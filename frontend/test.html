@@ -285,11 +285,13 @@
           pmh_conditions: [], current_medications: [], allergies: [],
         },
         responses: [
-          "I have a sore throat, runny nose, and mild congestion",
-          "About 2 days",
-          "About a 3 out of 10, pretty mild",
-          "No fever, no ear pain, no difficulty swallowing, no chest symptoms",
-          "No other symptoms, just feeling a bit run down",
+          "I have a sore throat, runny nose, and mild congestion. It started gradually.",
+          "About 2 days ago. No fever — I checked, it was 98.6.",
+          "About a 3 out of 10, pretty mild. I'm still going to work.",
+          "No ear pain, no difficulty swallowing, no chest pain or shortness of breath.",
+          "Just a bit run down and tired. No body aches beyond that.",
+          "A coworker was sick last week so I think I caught something. No known allergies.",
+          "No, nothing else. That's everything.",
         ],
       },
     ];
@@ -402,20 +404,27 @@
           }
         }
 
-        if (!finalResult) {
-          // All responses used without reaching assessment — send a final "no other symptoms"
+        // If scripted responses ran out, send up to 4 "no more" fallbacks to give
+        // the conversational AI a chance to wrap up naturally
+        const fallbacks = [
+          "No, nothing else to add.",
+          "That's really everything. No other symptoms.",
+          "No other symptoms at all.",
+          "Nothing more — that covers it.",
+        ];
+        for (let f = 0; f < fallbacks.length && !finalResult; f++) {
           const fallbackRes = await fetch(`${API}/api/session/${sessionId}/turn`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transcript: "No other symptoms." }),
+            body: JSON.stringify({ transcript: fallbacks[f] }),
           });
-          if (fallbackRes.ok) {
-            const data = await readTurnStream(fallbackRes);
-            if (data) {
-              s.log.push({ role: "you", text: "No other symptoms." });
-              s.log.push({ role: "ai", text: data.assistant_message });
-              finalResult = data;
-            }
+          if (!fallbackRes.ok) break;
+          const data = await readTurnStream(fallbackRes);
+          if (data) {
+            s.log.push({ role: "you", text: fallbacks[f] });
+            s.log.push({ role: "ai", text: data.assistant_message });
+            render();
+            if (!data.ask_follow_up) finalResult = data;
           }
         }
 
