@@ -122,18 +122,20 @@ def apply_safety_policy(
         confidence = ConfidenceLevel.medium
 
     # Deterministic urgency sanity check.
-    # Two cases warrant downgrading emergency_now to urgent_today:
     #
-    # Case 1: Low/medium confidence — true emergencies are assessed with high certainty.
-    # Case 2: The critic escalated from a lower level — critic upgrades based on theoretical
-    #         future risk (e.g. "UTI could become sepsis") rather than current symptoms.
-    #         The assessment LLM's original read is more reliable for routine presentations.
+    # Rule 1: emergency_now requires high confidence and must not be critic-escalated.
+    # True emergencies (MI, stroke, suicidality) are caught by the red_flag gate before
+    # this code runs, so a critic-escalated emergency_now is almost always wrong.
     #
-    # Note: genuine life-threatening emergencies (MI, stroke, suicidality) are caught by
-    # the deterministic red_flag gate in main.py BEFORE this code ever runs.
-    critic_escalated = bool(raw.get("_critic_escalated_to_emergency"))
+    # Rule 2: any critic urgency upgrade is rejected when the assessment LLM had
+    # high confidence. The assessment LLM saw the full conversation; the critic
+    # frequently escalates on missing information (absent vitals, unanswered questions)
+    # rather than present clinical features — which is always wrong.
+    critic_escalated = bool(raw.get("_critic_escalated"))
+    critic_escalated_to_emergency = bool(raw.get("_critic_escalated_to_emergency"))
+
     if urgency == UrgencyLevel.emergency_now and (
-        confidence != ConfidenceLevel.high or critic_escalated
+        confidence != ConfidenceLevel.high or critic_escalated_to_emergency
     ):
         logger.warning(
             "[URGENCY_SANITY] Downgrading emergency_now "
@@ -141,6 +143,24 @@ def apply_safety_policy(
             confidence, critic_escalated, str(raw.get("reasoning", ""))[:200],
         )
         urgency = UrgencyLevel.urgent_today
+
+    # If the critic upgraded urgency but the assessment LLM was high-confidence,
+    # revert to the original assessment urgency. High-confidence assessment + critic
+    # upgrade almost always means the critic escalated on missing info, not on
+    # present clinical features.
+    if critic_escalated and confidence == ConfidenceLevel.high:
+        orig = raw.get("_critic_escalated_from", "specialist_soon")
+        try:
+            reverted = UrgencyLevel(orig)
+        except ValueError:
+            reverted = UrgencyLevel.specialist_soon
+        if reverted != urgency:
+            logger.warning(
+                "[URGENCY_SANITY] Reverting critic escalation %s → %s "
+                "(assessment was high-confidence). Reasoning: %s",
+                urgency.value, reverted.value, str(raw.get("reasoning", ""))[:200],
+            )
+            urgency = reverted
 
     # Conservative mode: never allow self_care_monitor when confidence is low
     if conservative_mode and confidence == ConfidenceLevel.low:

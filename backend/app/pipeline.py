@@ -143,18 +143,18 @@ SAFETY REVIEW — check every item:
    - Fever ≥ 103°F: source must be identified; consider urgent_today
 
 3. URGENCY CALIBRATION:
-   - UPGRADE urgency only for CURRENT active symptoms indicating an emergency RIGHT NOW.
+   - UPGRADE urgency only when PRESENT clinical features in the conversation support it.
+   - NEVER upgrade urgency because information is ABSENT or MISSING. Missing vitals,
+     missing history, unanswered questions — these lower confidence_level only. They are
+     not clinical features and cannot justify a higher urgency. This is absolute.
    - Do NOT upgrade based on theoretical future progression — "UTI could become sepsis",
-     "cold could progress to pneumonia", "headache might be a tumor" are NOT grounds for
-     upgrading urgency. The patient's CURRENT presentation must have active emergency features.
+     "cold could progress to pneumonia" are NOT grounds for upgrading urgency.
    - DOWNGRADE emergency_now if the patient's current symptoms do not include: active chest
      pain/pressure, current respiratory distress, current facial drooping or arm weakness,
      SpO2 < 92%, active suicidal ideation with a plan, current hemodynamic instability,
      cauda equina signs, or active obstetric emergency.
    - A UTI, URI, headache, rash, GI illness, anxiety, or chronic condition follow-up is
      NEVER emergency_now based on current presentation alone.
-   - Missing or unmeasured vitals lower confidence — they do NOT raise urgency. If vitals
-     were not provided, note it as a confidence limitation, not an escalation reason.
 
 4. DRUG SAFETY (if prescription_guidance is non-empty):
    - Allergy check: no medication on the patient's allergy list
@@ -354,14 +354,22 @@ def run_assessment_pipeline(
     # Use critic-corrected assessment if available and valid, else fall back
     final_assessment = critic_result.get("assessment") or assessment_raw
 
-    # Flag if critic upgraded urgency to emergency_now from a lower level.
-    # apply_safety_policy uses this to apply extra skepticism to critic-driven escalations.
-    if (assessment_raw.get("urgency") != "emergency_now"
-            and final_assessment.get("urgency") == "emergency_now"):
-        final_assessment["_critic_escalated_to_emergency"] = True
+    # Detect any critic urgency upgrade and flag it.
+    # apply_safety_policy uses this to reject upgrades driven by missing information
+    # rather than present clinical features.
+    _urgency_order = ["self_care_monitor", "specialist_soon", "urgent_today", "emergency_now"]
+    orig_urgency = assessment_raw.get("urgency", "specialist_soon")
+    crit_urgency = final_assessment.get("urgency", orig_urgency)
+    orig_rank = _urgency_order.index(orig_urgency) if orig_urgency in _urgency_order else 1
+    crit_rank = _urgency_order.index(crit_urgency) if crit_urgency in _urgency_order else 1
+    if crit_rank > orig_rank:
+        final_assessment["_critic_escalated"] = True
+        final_assessment["_critic_escalated_from"] = orig_urgency
+        if crit_urgency == "emergency_now":
+            final_assessment["_critic_escalated_to_emergency"] = True
         logger.warning(
-            "[PIPELINE_CRITIC] Critic escalated to emergency_now from %s. Issues: %s",
-            assessment_raw.get("urgency"), issues,
+            "[PIPELINE_CRITIC] Critic escalated urgency %s → %s. Issues: %s",
+            orig_urgency, crit_urgency, issues,
         )
 
     # ── Stage 3: Patient-facing writer ───────────────────────────────────
