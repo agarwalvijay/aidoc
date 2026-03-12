@@ -427,7 +427,10 @@ class AnthropicClinicianLLM:
             raise RuntimeError("ANTHROPIC_API_KEY is not set in environment.")
         import anthropic as _sdk
 
-        self._client = _sdk.Anthropic(api_key=settings.anthropic_api_key)
+        self._client = _sdk.Anthropic(
+            api_key=settings.anthropic_api_key,
+            timeout=45.0,   # 45s per request — well above P99 latency, prevents hangs
+        )
         self._model = settings.anthropic_model
 
     def process_turn(
@@ -497,6 +500,7 @@ class LangChainClinicianLLM:
                     model=settings.openai_model,
                     temperature=0.1,
                     api_key=settings.openai_api_key,
+                    request_timeout=45,
                     model_kwargs=json_kwargs,
                 )
             if provider == "deepseek":
@@ -507,6 +511,7 @@ class LangChainClinicianLLM:
                     temperature=0.1,
                     api_key=settings.deepseek_api_key,
                     base_url=settings.deepseek_base_url,
+                    request_timeout=45,
                     model_kwargs=json_kwargs,
                 )
             if not settings.groq_api_key:
@@ -516,6 +521,7 @@ class LangChainClinicianLLM:
                 temperature=0.1,
                 api_key=settings.groq_api_key,
                 base_url=settings.groq_base_url,
+                request_timeout=45,
                 model_kwargs=json_kwargs,
             )
 
