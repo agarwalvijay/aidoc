@@ -212,12 +212,18 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
 
         llm = get_clinician_llm()
         try:
-            result = await asyncio.to_thread(
-                llm.process_turn,
-                profile=session.patient_profile,
-                conversation=session.messages,
-                force_assess=force_assess,
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    llm.process_turn,
+                    profile=session.patient_profile,
+                    conversation=session.messages,
+                    force_assess=force_assess,
+                ),
+                timeout=60,  # 60s for a single intake turn
             )
+        except asyncio.TimeoutError:
+            logger.error("[LLM_TIMEOUT] session=%s intake turn exceeded 60s", session_id)
+            result = {}
         except Exception as exc:
             logger.error("[LLM_ERROR] session=%s error=%s", session_id, exc)
             result = {}
@@ -256,16 +262,22 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
 
             async def run_pipeline() -> None:
                 try:
-                    fa, pm = await asyncio.to_thread(
-                        run_assessment_pipeline,
-                        profile=session.patient_profile,
-                        conversation=session.messages,
-                        intake_summary=intake_summary,
-                        invoke_fn=llm.invoke_raw,
-                        prescribing_enabled=settings.prescribing_enabled,
-                        progress_callback=progress_cb,
-                        specialty=session.patient_profile.specialty,
+                    fa, pm = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            run_assessment_pipeline,
+                            profile=session.patient_profile,
+                            conversation=session.messages,
+                            intake_summary=intake_summary,
+                            invoke_fn=llm.invoke_raw,
+                            prescribing_enabled=settings.prescribing_enabled,
+                            progress_callback=progress_cb,
+                            specialty=session.patient_profile.specialty,
+                        ),
+                        timeout=120,  # 2 min hard ceiling — prevents indefinite hang
                     )
+                except asyncio.TimeoutError:
+                    logger.error("[PIPELINE_TIMEOUT] session=%s pipeline exceeded 120s", session_id)
+                    fa, pm = {}, ""
                 except Exception as exc:
                     logger.error("[PIPELINE_ERROR] session=%s error=%s", session_id, exc)
                     fa, pm = {}, ""
