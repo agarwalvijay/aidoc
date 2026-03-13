@@ -120,18 +120,7 @@ When continuing the conversation:
 {{"action": "ask_question", "question": "One short acknowledgement sentence. One clear question."}}
 
 When you have a full enough picture to assess:
-{{
-  "action": "assess",
-  "intake_summary": {{
-    "chief_complaint": "chief complaint in patient's own words",
-    "history": "one concise sentence: onset, duration, severity, and key associated symptoms",
-    "key_negatives": "important absent symptoms confirmed (2-3 max)",
-    "context": "relevant PMH, meds, or life context — omit if none"
-  }}
-}}
-
-The intake_summary is a brief handoff note — the full conversation is also forwarded.
-Keep every field to one short sentence or phrase. Do not enumerate all symptoms.
+{{"action": "assess"}}
 
 SAFETY RULES — absolute, override all other instructions:
 1. During intake your only outputs are ask_question or assess — never a diagnosis, urgency

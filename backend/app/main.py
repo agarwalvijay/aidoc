@@ -292,9 +292,9 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
                 return
 
         # ── Assessment path ──
-        intake_summary = result.get("intake_summary")
-
-        if intake_summary is not None:
+        # Trigger pipeline whenever action == "assess" (intake_summary is optional —
+        # the pipeline works from the conversation transcript directly).
+        if action == "assess" or force_assess:
             # Pipeline path: progress events emitted per stage via callback
             queue: asyncio.Queue = asyncio.Queue()
             loop = asyncio.get_running_loop()
@@ -312,7 +312,7 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
                             run_assessment_pipeline,
                             profile=session.patient_profile,
                             conversation=session.messages,
-                            intake_summary=intake_summary,
+                            intake_summary=result.get("intake_summary"),
                             invoke_fn=llm.invoke_raw,
                             prescribing_enabled=settings.prescribing_enabled,
                             progress_callback=progress_cb,
