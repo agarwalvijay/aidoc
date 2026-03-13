@@ -1,6 +1,7 @@
 import asyncio
 import json as _json
 import logging
+import time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -211,6 +212,8 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
         force_assess = session.turn_count >= max_turns
 
         llm = get_clinician_llm()
+        llm_failed = False
+        _t0 = time.monotonic()
         try:
             result = await asyncio.wait_for(
                 asyncio.to_thread(
@@ -221,12 +224,46 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
                 ),
                 timeout=35,  # 35s for a single intake turn (LangChain timeout is 30s)
             )
+            logger.info(
+                "[LLM_LATENCY] session=%s turn=%d elapsed=%.2fs action=%s",
+                session_id, session.turn_count, time.monotonic() - _t0, result.get("action", "?"),
+            )
         except asyncio.TimeoutError:
-            logger.error("[LLM_TIMEOUT] session=%s intake turn exceeded 60s", session_id)
+            logger.error(
+                "[LLM_TIMEOUT] session=%s turn=%d elapsed=%.2fs intake turn exceeded 35s",
+                session_id, session.turn_count, time.monotonic() - _t0,
+            )
             result = {}
+            llm_failed = True
         except Exception as exc:
-            logger.error("[LLM_ERROR] session=%s error=%s", session_id, exc)
+            logger.error(
+                "[LLM_ERROR] session=%s turn=%d elapsed=%.2fs error=%s",
+                session_id, session.turn_count, time.monotonic() - _t0, exc,
+            )
             result = {}
+            llm_failed = True
+
+        # ── LLM failure mid-conversation: keep the conversation alive ──
+        # If the LLM errored/timed-out and we haven't hit the forced-assess
+        # ceiling yet, return a canned follow-up question rather than immediately
+        # producing an "Undetermined" assessment, which is jarring and useless.
+        if llm_failed and not force_assess:
+            user_turns = sum(1 for m in session.messages if m.role == Role.user)
+            fallback_qs = [
+                "Can you tell me a bit more about how severe the symptoms are — are they interfering with your normal activities?",
+                "Have you noticed anything that makes the symptoms better or worse?",
+                "Is there anything else going on that you think might be related?",
+            ]
+            fallback_q = fallback_qs[min(user_turns - 1, len(fallback_qs) - 1)]
+            session.messages.append(ChatMessage(role=Role.assistant, content=fallback_q))
+            resp = TurnResponse(
+                session_id=session_id,
+                assistant_message=fallback_q,
+                ask_follow_up=True,
+                follow_up_question=fallback_q,
+            )
+            yield _sse({"type": "result", "data": resp.model_dump()})
+            return
 
         action = result.get("action", "")
 

@@ -169,6 +169,10 @@ def apply_safety_policy(
                 urgency.value, reverted.value, str(raw.get("reasoning", ""))[:200],
             )
             urgency = reverted
+            # Also restore confidence to the original assessment value — the critic
+            # may have lowered confidence alongside its urgency upgrade to bypass
+            # this sanity check. If we're reverting urgency, revert confidence too.
+            confidence = orig_confidence
 
     # Conservative mode: never allow self_care_monitor when confidence is low
     if conservative_mode and confidence == ConfidenceLevel.low:

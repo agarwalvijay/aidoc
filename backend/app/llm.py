@@ -493,6 +493,10 @@ class LangChainClinicianLLM:
             # NOTE: system prompt must contain the word "json" (it does).
             json_kwargs = {"response_format": {"type": "json_object"}}
 
+            # max_tokens: intake LLM only ever needs a short question (~60 tok)
+            # or a full intake_summary (~300 tok). Cap at 600 to prevent the model
+            # from generating thousands of tokens in json_object mode — which is
+            # the root cause of 30s+ hangs on gpt-4o-mini for assess responses.
             if provider == "openai":
                 if not settings.openai_api_key:
                     raise RuntimeError("OPENAI_API_KEY is not set.")
@@ -502,6 +506,7 @@ class LangChainClinicianLLM:
                     api_key=settings.openai_api_key,
                     request_timeout=30,
                     max_retries=0,
+                    max_tokens=600,
                     model_kwargs=json_kwargs,
                 )
             if provider == "deepseek":
@@ -514,6 +519,7 @@ class LangChainClinicianLLM:
                     base_url=settings.deepseek_base_url,
                     request_timeout=30,
                     max_retries=0,
+                    max_tokens=600,
                     model_kwargs=json_kwargs,
                 )
             if not settings.groq_api_key:
@@ -525,6 +531,7 @@ class LangChainClinicianLLM:
                 base_url=settings.groq_base_url,
                 request_timeout=30,
                 max_retries=0,
+                max_tokens=600,
                 model_kwargs=json_kwargs,
             )
 
