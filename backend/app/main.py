@@ -214,34 +214,42 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
         llm = get_clinician_llm()
         llm_failed = False
         _t0 = time.monotonic()
-        try:
-            result = await asyncio.wait_for(
+
+        async def _call_intake_llm():
+            return await asyncio.wait_for(
                 asyncio.to_thread(
                     llm.process_turn,
                     profile=session.patient_profile,
                     conversation=session.messages,
                     force_assess=force_assess,
                 ),
-                timeout=35,  # 35s for a single intake turn (LangChain timeout is 30s)
+                timeout=35,
             )
+
+        try:
+            result = await _call_intake_llm()
+        except Exception as exc1:
+            elapsed1 = time.monotonic() - _t0
+            logger.warning(
+                "[LLM_RETRY] session=%s turn=%d elapsed=%.2fs first attempt failed: %s — retrying",
+                session_id, session.turn_count, elapsed1, exc1,
+            )
+            await asyncio.sleep(1)
+            try:
+                result = await _call_intake_llm()
+            except Exception as exc2:
+                logger.error(
+                    "[LLM_FAIL] session=%s turn=%d elapsed=%.2fs both attempts failed: %s",
+                    session_id, session.turn_count, time.monotonic() - _t0, exc2,
+                )
+                result = {}
+                llm_failed = True
+
+        if not llm_failed:
             logger.info(
                 "[LLM_LATENCY] session=%s turn=%d elapsed=%.2fs action=%s",
                 session_id, session.turn_count, time.monotonic() - _t0, result.get("action", "?"),
             )
-        except asyncio.TimeoutError:
-            logger.error(
-                "[LLM_TIMEOUT] session=%s turn=%d elapsed=%.2fs intake turn exceeded 35s",
-                session_id, session.turn_count, time.monotonic() - _t0,
-            )
-            result = {}
-            llm_failed = True
-        except Exception as exc:
-            logger.error(
-                "[LLM_ERROR] session=%s turn=%d elapsed=%.2fs error=%s",
-                session_id, session.turn_count, time.monotonic() - _t0, exc,
-            )
-            result = {}
-            llm_failed = True
 
         # ── LLM failure mid-conversation: keep the conversation alive ──
         # If the LLM errored/timed-out and we haven't hit the forced-assess
