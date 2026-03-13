@@ -939,6 +939,7 @@
       // null = unknown, true = available, false = not available
       let backendTtsAvailable = null;
       let backendTtsProvider = "openai"; // updated from /api/health
+      let _ttsProbePromise = null;       // resolves when probe completes
 
       // ── Helpers ──
       function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -1009,7 +1010,12 @@
       }
 
       // ── Backend TTS probe ──
-      async function probeBackendTts() {
+      // Called once at page load. Stores the promise so startSession can await it.
+      function probeBackendTts() {
+        _ttsProbePromise = _doProbe();
+        return _ttsProbePromise;
+      }
+      async function _doProbe() {
         try {
           // Read provider from health first so the badge shows the correct label
           const h = await fetch(`${API}/api/health`);
@@ -1514,10 +1520,9 @@
           document.getElementById("modeToggle").textContent = "Switch to text input";
         }
 
-        // Probe backend TTS availability (once per page load)
-        if (backendTtsAvailable === null) {
-          probeBackendTts(); // fire and forget — first response may use Web Speech
-        }
+        // Await TTS probe so the opening message uses the correct provider.
+        // The probe was started at page load; if already done this resolves instantly.
+        if (_ttsProbePromise) await _ttsProbePromise;
 
         const start = await fetch(`${API}/api/session/start`, {
           method: "POST",
@@ -1604,6 +1609,10 @@
         const row = document.getElementById("pregnantRow");
         row.style.display = (this.value === "female" || this.value === "other") ? "block" : "none";
       });
+
+      // Kick off TTS probe immediately at page load so it's done (or nearly done)
+      // by the time the user fills in the form and clicks Begin.
+      probeBackendTts();
 
       // ── Home → Onboard (chime plays here) ──
       document.getElementById("startBtn").addEventListener("click", async () => {
