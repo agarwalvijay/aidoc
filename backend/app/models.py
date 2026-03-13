@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Sex(str, Enum):
@@ -63,6 +63,13 @@ class StartSessionResponse(BaseModel):
 
 class TurnRequest(BaseModel):
     transcript: str = Field(..., min_length=1, description="User speech or typed text")
+
+    @field_validator("transcript")
+    @classmethod
+    def transcript_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("transcript must not be blank or whitespace only")
+        return v
 
 
 class RedFlagHit(BaseModel):

@@ -29,7 +29,22 @@ from .triage import apply_safety_policy, build_red_flag_assessment
 
 logger = logging.getLogger("uvicorn.error")
 
+
+async def _session_cleanup_loop() -> None:
+    """Purge expired sessions every hour."""
+    while True:
+        await asyncio.sleep(3600)
+        removed = session_store.cleanup_expired()
+        if removed:
+            logger.info("[SESSION_CLEANUP] Removed %d expired sessions", removed)
+
+
 app = FastAPI(title="AI Doctor API", version="0.3.0")
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    asyncio.create_task(_session_cleanup_loop())
 
 app.add_middleware(
     CORSMiddleware,

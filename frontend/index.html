@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Doctor Kiosk</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <style>
       :root {
         --bg-a: #060b18;
@@ -124,7 +125,7 @@
         border-color: var(--accent);
         background: rgba(101, 209, 196, 0.08);
       }
-      .specialty-icon { font-size: 1.6rem; line-height: 1; }
+      .specialty-icon { font-size: 1.25rem; line-height: 1; }
       .specialty-name { font-size: 0.88rem; font-weight: 700; color: var(--text); }
       .specialty-desc { font-size: 0.72rem; color: #7aaacc; line-height: 1.4; }
 
@@ -768,7 +769,10 @@
             </div>
           </div>
 
-          <!-- Vitals -->
+          </div><!-- /onboard-col right -->
+          </div><!-- /onboard-cols -->
+
+          <!-- Vitals — full width -->
           <div class="form-section">
             <div class="form-section-title">Current Vitals <span style="color:#7aaacc;font-weight:400;text-transform:none;letter-spacing:0">(all optional)</span></div>
             <div class="form-row">
@@ -805,7 +809,7 @@
             </div>
           </div>
 
-          <!-- Medications and allergies -->
+          <!-- Medications and allergies — full width -->
           <div class="form-section">
             <div class="form-section-title">Medications &amp; Allergies</div>
             <div class="form-row">
@@ -819,9 +823,6 @@
               </div>
             </div>
           </div>
-
-          </div><!-- /onboard-col right -->
-          </div><!-- /onboard-cols -->
 
           <div id="formError" class="form-error">Please fill in the required fields (Age and Sex).</div>
           <button type="submit" class="btn-submit" id="beginBtn">Begin Consultation</button>
@@ -1651,6 +1652,9 @@
         document.querySelectorAll(".specialty-card").forEach(c => {
           c.classList.toggle("selected", c.dataset.specialty === selectedSpecialty);
         });
+        // Reset pregnancy field — sex selection may differ next session
+        document.getElementById("fieldPregnant").value = "";
+        document.getElementById("pregnantRow").style.display = "none";
         sessionScreen.classList.remove("active");
         onboardScreen.classList.add("active");
       });
