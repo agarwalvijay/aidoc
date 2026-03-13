@@ -494,7 +494,7 @@ class LangChainClinicianLLM:
                     api_key=settings.openai_api_key,
                     request_timeout=30,
                     max_retries=0,
-                    max_tokens=400,
+                    max_tokens=800,
                     model_kwargs=json_kwargs,
                 )
             if provider == "deepseek":
@@ -507,7 +507,7 @@ class LangChainClinicianLLM:
                     base_url=settings.deepseek_base_url,
                     request_timeout=30,
                     max_retries=0,
-                    max_tokens=400,
+                    max_tokens=800,
                     model_kwargs=json_kwargs,
                 )
             if not settings.groq_api_key:
@@ -587,7 +587,10 @@ class LangChainClinicianLLM:
             else:
                 lc_messages.append(AIMessage(content=m["content"]))
 
-        response = self.llm.invoke(lc_messages)
+        # Bind max_tokens per-call so pipeline stages are not capped by the
+        # intake LLM's conservative limit (800). The critic and assessment stages
+        # need 1024+ tokens for their full JSON responses.
+        response = self.llm.bind(max_tokens=max_tokens).invoke(lc_messages)
         return str(response.content).strip()
 
 
