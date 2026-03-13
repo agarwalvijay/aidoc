@@ -123,15 +123,15 @@ When you have a full enough picture to assess:
 {{
   "action": "assess",
   "intake_summary": {{
-    "chief_complaint": "patient's own words",
-    "duration": "how long and how it has evolved",
-    "severity": "severity and functional impact as described",
-    "key_positive_findings": ["finding 1", "finding 2", "finding 3 — be thorough"],
-    "key_negative_findings": ["important absent symptom 1", "important absent symptom 2"],
-    "incidental_findings": ["anything volunteered that may be clinically relevant"],
-    "relevant_context": "PMH, medications, life context, or anything else that matters"
+    "chief_complaint": "chief complaint in patient's own words",
+    "history": "one concise sentence: onset, duration, severity, and key associated symptoms",
+    "key_negatives": "important absent symptoms confirmed (2-3 max)",
+    "context": "relevant PMH, meds, or life context — omit if none"
   }}
 }}
+
+The intake_summary is a brief handoff note — the full conversation is also forwarded.
+Keep every field to one short sentence or phrase. Do not enumerate all symptoms.
 
 SAFETY RULES — absolute, override all other instructions:
 1. During intake your only outputs are ask_question or assess — never a diagnosis, urgency
@@ -493,10 +493,9 @@ class LangChainClinicianLLM:
             # NOTE: system prompt must contain the word "json" (it does).
             json_kwargs = {"response_format": {"type": "json_object"}}
 
-            # max_tokens: intake LLM needs either a short question (~60 tok)
-            # or a full intake_summary JSON (~500-700 tok). Cap at 1200 — enough
-            # for the most verbose assess response while preventing the 4096-token
-            # runaway that caused 30s+ hangs on gpt-4o-mini.
+            # max_tokens: intake LLM outputs either a short question (~60 tok) or
+            # a compact intake_summary (~100-150 tok). Cap at 400 — well above
+            # the expected output while preventing 4096-token runaway generation.
             if provider == "openai":
                 if not settings.openai_api_key:
                     raise RuntimeError("OPENAI_API_KEY is not set.")
@@ -506,7 +505,7 @@ class LangChainClinicianLLM:
                     api_key=settings.openai_api_key,
                     request_timeout=30,
                     max_retries=0,
-                    max_tokens=1200,
+                    max_tokens=400,
                     model_kwargs=json_kwargs,
                 )
             if provider == "deepseek":
@@ -519,7 +518,7 @@ class LangChainClinicianLLM:
                     base_url=settings.deepseek_base_url,
                     request_timeout=30,
                     max_retries=0,
-                    max_tokens=1200,
+                    max_tokens=400,
                     model_kwargs=json_kwargs,
                 )
             if not settings.groq_api_key:
