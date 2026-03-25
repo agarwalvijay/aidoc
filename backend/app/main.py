@@ -1,6 +1,7 @@
 import asyncio
 import json as _json
 import logging
+import re
 import time
 
 from fastapi import FastAPI, HTTPException
@@ -121,6 +122,182 @@ def _sse(obj: dict) -> str:
     return f"data: {_json.dumps(obj)}\n\n"
 
 
+def _extract_latest_vitals_from_text(text: str) -> dict:
+    """
+    Best-effort extraction of vitals from free text.
+    Uses the latest mention in the text for each vital (handles corrections).
+    """
+    out = {}
+    lower = text.lower()
+
+    # Temperature
+    temp_patterns = [
+        r"(?:temp(?:erature)?|fever)[^\d]{0,12}(\d{2,3}(?:\.\d+)?)\s*°?\s*([fc])?",
+        r"(\d{2,3}(?:\.\d+)?)\s*°\s*([fc])",
+    ]
+    for pat in temp_patterns:
+        for m in re.finditer(pat, lower):
+            val = float(m.group(1))
+            unit = (m.group(2) or "f").lower()
+            temp_f = (val * 9.0 / 5.0 + 32.0) if unit == "c" else val
+            if 88.0 <= temp_f <= 110.0:
+                out["temperature_f"] = round(temp_f, 1)
+
+    # Blood pressure
+    for m in re.finditer(r"(?:bp|blood pressure)[^\d]{0,12}(\d{2,3})\s*(?:/|over)\s*(\d{2,3})", lower):
+        s, d = int(m.group(1)), int(m.group(2))
+        if 60 <= s <= 280 and 30 <= d <= 160:
+            out["systolic_bp"] = s
+            out["diastolic_bp"] = d
+
+    # Heart rate
+    for m in re.finditer(r"(?:heart rate|pulse|hr)[^\d]{0,12}(\d{2,3})\s*(?:bpm)?", lower):
+        hr = int(m.group(1))
+        if 20 <= hr <= 300:
+            out["heart_rate"] = hr
+
+    # Oxygen saturation
+    for m in re.finditer(r"(?:spo2|oxygen(?:\s*saturation)?|o2(?:\s*sat(?:uration)?)?)[^\d]{0,12}(\d{2,3})\s*%?", lower):
+        o2 = int(m.group(1))
+        if 50 <= o2 <= 100:
+            out["spo2"] = o2
+
+    return out
+
+
+def _update_profile_vitals_from_conversation(session) -> None:
+    all_user_text = " ".join(m.content for m in session.messages if m.role == Role.user)
+    vitals = _extract_latest_vitals_from_text(all_user_text)
+    if not vitals:
+        return
+    profile = session.patient_profile
+    for key, value in vitals.items():
+        setattr(profile, key, value)
+    logger.info(
+        "[VITALS_UPDATED] session=%s temp=%s bp=%s/%s hr=%s spo2=%s",
+        session.session_id,
+        profile.temperature_f,
+        profile.systolic_bp,
+        profile.diastolic_bp,
+        profile.heart_rate,
+        profile.spo2,
+    )
+
+
+def _normalize_follow_up_question(raw: str) -> str:
+    text = " ".join(str(raw or "").strip().split())
+    if not text:
+        return ""
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    question_sentences = [s for s in sentences if "?" in s]
+
+    if question_sentences:
+        q = question_sentences[0]
+        prefix = next((s for s in sentences if s != q and "?" not in s), "")
+        text = f"{prefix} {q}".strip() if prefix else q
+    else:
+        text = sentences[0] if sentences else text
+        if not text.endswith("?"):
+            text += "?"
+
+    words = text.split()
+    if len(words) > 32:
+        text = " ".join(words[:32]).rstrip(".,;:!?") + "?"
+    if not text.endswith("?"):
+        text += "?"
+    return text
+
+
+def _looks_like_vitals_question(question: str) -> bool:
+    q = question.lower()
+    return any(
+        token in q
+        for token in ("vitals", "temperature", "blood pressure", "heart rate", "oxygen", "spo2", "pulse")
+    )
+
+
+def _has_any_vitals(profile) -> bool:
+    return any(
+        v is not None
+        for v in (
+            profile.temperature_f,
+            profile.systolic_bp,
+            profile.diastolic_bp,
+            profile.heart_rate,
+            profile.spo2,
+        )
+    )
+
+
+def _min_turn_follow_up_question(session) -> str:
+    text = " ".join(m.content for m in session.messages if m.role == Role.user).lower()
+    has_duration = bool(re.search(r"\b(hour|hours|day|days|week|weeks|month|months|since|started)\b", text))
+    has_severity = bool(re.search(r"\b(mild|moderate|severe|worse|better|scale|out of 10|interfer)\b", text))
+    has_negatives = bool(re.search(r"\b(no |not |without )\b", text))
+
+    if not has_duration:
+        return "Thanks for sharing that. How long have these symptoms been going on, and are they changing over time?"
+    if not has_severity:
+        return "Understood. How severe are these symptoms right now, and how much are they affecting your day-to-day activities?"
+    if not has_negatives:
+        return "Got it. Are you also having any warning symptoms like chest pain, trouble breathing, fainting, or confusion?"
+    return "Thanks, that helps. Is there anything else you have noticed that seems connected to these symptoms?"
+
+
+def _build_conversation_memory(session) -> str:
+    """
+    Create a concise, human-readable summary of what the patient has shared so far.
+    This is used for recap phrasing and to keep continuity across turns.
+    """
+    user_msgs = [m.content.strip() for m in session.messages if m.role == Role.user and m.content.strip()]
+    if not user_msgs:
+        return ""
+
+    profile = session.patient_profile
+    complaint = profile.chief_complaint or user_msgs[0]
+    complaint = complaint.strip()
+    if len(complaint) > 80:
+        complaint = complaint[:80].rstrip() + "..."
+
+    all_text = " ".join(user_msgs).lower()
+    duration_match = re.search(
+        r"\b(\d+\s*(?:hour|hours|day|days|week|weeks|month|months|year|years)|since\s+\w+|for\s+\w+)\b",
+        all_text,
+    )
+    duration = duration_match.group(1) if duration_match else "unspecified duration"
+
+    impact = ""
+    if re.search(r"\b(weak|fatigue|tired|can't eat|cannot eat|interfer|worse)\b", all_text):
+        impact = "with noticeable impact on daily functioning"
+
+    vitals = []
+    if profile.temperature_f is not None:
+        vitals.append(f"temp {profile.temperature_f}F")
+    if profile.systolic_bp is not None and profile.diastolic_bp is not None:
+        vitals.append(f"BP {profile.systolic_bp}/{profile.diastolic_bp}")
+    if profile.heart_rate is not None:
+        vitals.append(f"HR {profile.heart_rate}")
+    if profile.spo2 is not None:
+        vitals.append(f"SpO2 {profile.spo2}%")
+
+    vitals_part = f"; vitals: {', '.join(vitals)}" if vitals else ""
+    impact_part = f", {impact}" if impact else ""
+    return f"Main concern: {complaint}; duration: {duration}{impact_part}{vitals_part}."
+
+
+def _build_recap_question(session) -> str:
+    memory = session.conversation_memory or _build_conversation_memory(session)
+    if memory:
+        return (
+            f"Let me make sure I understood correctly: {memory} "
+            "Did I capture that correctly, and is there anything important I missed?"
+        )
+    return (
+        "Let me make sure I understood correctly. "
+        "Did I capture your symptoms accurately, and is there anything important I missed?"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -199,6 +376,11 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
 
     session.turn_count += 1
     session.messages.append(ChatMessage(role=Role.user, content=request.transcript))
+    _update_profile_vitals_from_conversation(session)
+    session.conversation_memory = _build_conversation_memory(session)
+    if session.recap_requested and not session.recap_completed:
+        session.recap_requested = False
+        session.recap_completed = True
 
     all_user_text = " ".join(m.content for m in session.messages if m.role == Role.user)
     red_flags = detect_red_flags(all_user_text)
@@ -290,11 +472,33 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
 
         action = result.get("action", "")
 
+        # Enforce minimum intake depth before allowing assessment.
+        if action == "assess" and session.turn_count < min_turns and not force_assess:
+            action = "ask_question"
+            result["question"] = _min_turn_follow_up_question(session)
+
+        # Human-style checkpoint: confirm understanding once before final assessment.
+        if (action == "assess" or force_assess) and not session.recap_completed and session.turn_count >= min_turns:
+            recap_q = _build_recap_question(session)
+            session.recap_requested = True
+            session.messages.append(ChatMessage(role=Role.assistant, content=recap_q))
+            resp = TurnResponse(
+                session_id=session_id,
+                assistant_message=recap_q,
+                ask_follow_up=True,
+                follow_up_question=recap_q,
+            )
+            yield _sse({"type": "result", "data": resp.model_dump()})
+            return
+
         # ── Follow-up question path ──
         if action == "ask_question" and not force_assess:
-            question = str(result.get("question", "")).strip()
-            if question and not question.endswith("?"):
-                question += "?"
+            question = _normalize_follow_up_question(str(result.get("question", "")))
+            if _looks_like_vitals_question(question) and _has_any_vitals(session.patient_profile):
+                question = (
+                    "Thanks for sharing those vitals. How long have these symptoms been going on, "
+                    "and are they getting better or worse?"
+                )
             if question and len(question) > 8:
                 session.messages.append(ChatMessage(role=Role.assistant, content=question))
                 resp = TurnResponse(

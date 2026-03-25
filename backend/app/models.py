@@ -115,3 +115,6 @@ class SessionState(BaseModel):
     messages: List[ChatMessage] = Field(default_factory=list)
     turn_count: int = 0
     vitals: ClinicalVitals = Field(default_factory=ClinicalVitals)
+    conversation_memory: str = ""
+    recap_requested: bool = False
+    recap_completed: bool = False
