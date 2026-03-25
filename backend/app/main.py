@@ -29,6 +29,8 @@ from .session_store import session_store
 from .triage import apply_safety_policy, build_red_flag_assessment
 
 logger = logging.getLogger("uvicorn.error")
+MAX_REPORT_BYTES = 8 * 1024 * 1024
+ALLOWED_REPORT_EXTENSIONS = (".pdf", ".txt", ".csv")
 
 
 async def _session_cleanup_loop() -> None:
@@ -144,6 +146,25 @@ def _clean_report_text(text: str) -> str:
     return " ".join((text or "").split()).strip()
 
 
+def _parse_json_object_loose(text: str) -> dict:
+    txt = (text or "").strip()
+    if txt.startswith("```"):
+        txt = txt.replace("```json", "").replace("```JSON", "").replace("```", "").strip()
+    try:
+        data = _json.loads(txt)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        start = txt.find("{")
+        end = txt.rfind("}")
+        if start != -1 and end > start:
+            try:
+                data = _json.loads(txt[start:end + 1])
+                return data if isinstance(data, dict) else {}
+            except Exception:
+                pass
+    return {}
+
+
 async def _answer_post_assessment_question(session, user_question: str) -> str:
     llm = get_clinician_llm()
     system = """You are a warm, clear clinician answering follow-up questions after triage.
@@ -169,10 +190,7 @@ Return valid JSON only:
             [{"role": "user", "content": context}],
             450,
         )
-        text = raw.strip()
-        if text.startswith("```"):
-            text = text.strip("`")
-        data = _json.loads(text)
+        data = _parse_json_object_loose(raw)
         reply = str(data.get("reply", "")).strip() if isinstance(data, dict) else ""
         if reply:
             return reply
@@ -204,11 +222,22 @@ async def health() -> dict:
 @app.post("/api/reports/extract")
 async def extract_report(file: UploadFile = File(...)) -> dict:
     name = file.filename or "uploaded_report"
+    name_lower = name.lower()
+    if not name_lower.endswith(ALLOWED_REPORT_EXTENSIONS):
+        raise HTTPException(
+            status_code=415,
+            detail="Unsupported file type. Please upload PDF, TXT, or CSV.",
+        )
+
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(content) > MAX_REPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="File is too large. Please keep each report under 8 MB.",
+        )
 
-    name_lower = name.lower()
     is_pdf = name_lower.endswith(".pdf") or (file.content_type or "").lower() == "application/pdf"
 
     if is_pdf:
