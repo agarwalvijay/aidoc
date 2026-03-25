@@ -237,6 +237,56 @@
         margin-top: 6px;
         display: none;
       }
+      .upload-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 4px;
+      }
+      .btn-upload {
+        border: 0;
+        border-radius: 10px;
+        padding: 9px 14px;
+        font-size: 0.84rem;
+        font-weight: 700;
+        color: #06141e;
+        background: linear-gradient(130deg, var(--accent), var(--accent-2));
+        cursor: pointer;
+      }
+      .btn-upload:hover { opacity: 0.9; }
+      .upload-hint {
+        color: #7aaacc;
+        font-size: 0.82rem;
+      }
+      .upload-file-list {
+        list-style: none;
+        margin: 10px 0 0;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .upload-file-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        padding: 5px 10px;
+        background: rgba(26, 47, 82, 0.8);
+        border: 1px solid rgba(100, 160, 210, 0.35);
+        color: #d4e9ff;
+        font-size: 0.8rem;
+      }
+      .upload-file-remove {
+        border: 0;
+        background: transparent;
+        color: #9fc8e8;
+        cursor: pointer;
+        padding: 0;
+        font-size: 0.82rem;
+        line-height: 1;
+      }
+      .upload-file-remove:hover { color: #ff9090; }
 
       /* ── Two-column onboarding layout ── */
       .onboard-cols {
@@ -828,8 +878,12 @@
             <div class="form-section-title">Lab Reports <span style="color:#7aaacc;font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></div>
             <div class="form-group">
               <label for="fieldReports">Upload one or more reports (PDF or text)</label>
-              <input type="file" id="fieldReports" accept=".pdf,.txt,.csv" multiple />
-              <div id="reportSelected" style="margin-top:8px;color:#7aaacc;font-size:0.86rem;">No files selected.</div>
+              <input type="file" id="fieldReports" accept=".pdf,.txt,.csv" multiple style="display:none;" />
+              <div class="upload-toolbar">
+                <button type="button" id="addReportsBtn" class="btn-upload">Choose Files</button>
+                <span id="reportSelected" class="upload-hint">No files selected.</span>
+              </div>
+              <ul id="reportFileList" class="upload-file-list"></ul>
               <div id="reportUploadStatus" style="margin-top:8px;color:#9fc8e8;font-size:0.9rem;"></div>
             </div>
           </div>
@@ -965,6 +1019,7 @@
       let lastAiText      = "";
       let heardResult     = false;
       let uploadedReports = [];
+      let selectedReportFiles = [];
 
       // ── TTS state ──
       // null = unknown, true = available, false = not available
@@ -1531,6 +1586,7 @@
         useTextMode     = false;
         lastAiText      = "";
         uploadedReports = [];
+        selectedReportFiles = [];
 
         // Update specialty label in header
         document.getElementById("specialtyLabel").textContent =
@@ -1598,19 +1654,64 @@
         return await resp.json();
       }
 
-      document.getElementById("fieldReports").addEventListener("change", (e) => {
-        const files = [...(e.target.files || [])];
+      function reportFileKey(file) {
+        return `${file.name}|${file.size}|${file.lastModified}`;
+      }
+
+      function renderReportFileList() {
         const selected = document.getElementById("reportSelected");
-        const status = document.getElementById("reportUploadStatus");
-        if (!files.length) {
+        const list = document.getElementById("reportFileList");
+        list.innerHTML = "";
+        if (!selectedReportFiles.length) {
           selected.textContent = "No files selected.";
-          status.textContent = "";
           return;
         }
-        selected.textContent = files.length === 1
-          ? `Selected: ${files[0].name}`
-          : `Selected ${files.length} files: ${files.slice(0, 3).map(f => f.name).join(", ")}${files.length > 3 ? ", ..." : ""}`;
-        status.textContent = "Files selected. They will be processed when you begin consultation.";
+        selected.textContent = selectedReportFiles.length === 1
+          ? "1 file selected."
+          : `${selectedReportFiles.length} files selected.`;
+        selectedReportFiles.forEach((file) => {
+          const li = document.createElement("li");
+          li.className = "upload-file-item";
+          const name = document.createElement("span");
+          name.textContent = file.name;
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "upload-file-remove";
+          remove.textContent = "Remove";
+          remove.addEventListener("click", () => {
+            const key = reportFileKey(file);
+            selectedReportFiles = selectedReportFiles.filter((f) => reportFileKey(f) !== key);
+            renderReportFileList();
+            if (!selectedReportFiles.length) {
+              document.getElementById("reportUploadStatus").textContent = "";
+            }
+          });
+          li.appendChild(name);
+          li.appendChild(remove);
+          list.appendChild(li);
+        });
+      }
+
+      document.getElementById("addReportsBtn").addEventListener("click", () => {
+        document.getElementById("fieldReports").click();
+      });
+
+      document.getElementById("fieldReports").addEventListener("change", (e) => {
+        const files = [...(e.target.files || [])];
+        const status = document.getElementById("reportUploadStatus");
+        const known = new Set(selectedReportFiles.map(reportFileKey));
+        for (const file of files) {
+          const key = reportFileKey(file);
+          if (!known.has(key)) {
+            selectedReportFiles.push(file);
+            known.add(key);
+          }
+        }
+        renderReportFileList();
+        status.textContent = selectedReportFiles.length
+          ? "Files selected. They will be processed when you begin consultation."
+          : "";
+        e.target.value = "";
       });
 
       // ── Onboarding form submit ──
@@ -1649,14 +1750,12 @@
         const diastoVal   = parseInt(document.getElementById("fieldDiastolic").value, 10);
         const hrVal       = parseInt(document.getElementById("fieldHR").value, 10);
         const spo2Val     = parseInt(document.getElementById("fieldSpO2").value, 10);
-        const reportInput = document.getElementById("fieldReports");
-        const reportFiles = [...(reportInput.files || [])];
         const reportStatus = document.getElementById("reportUploadStatus");
 
         uploadedReports = [];
-        if (reportFiles.length) {
+        if (selectedReportFiles.length) {
           reportStatus.textContent = "Processing uploaded reports...";
-          for (const file of reportFiles) {
+          for (const file of selectedReportFiles) {
             try {
               const out = await extractReport(file);
               if (out && out.content) {
@@ -1704,6 +1803,7 @@
         const row = document.getElementById("pregnantRow");
         row.style.display = (this.value === "female" || this.value === "other") ? "block" : "none";
       });
+      renderReportFileList();
 
       // Kick off TTS probe immediately at page load so it's done (or nearly done)
       // by the time the user fills in the form and clicks Begin.
@@ -1731,9 +1831,10 @@
         document.getElementById("fieldPregnant").value = "";
         document.getElementById("pregnantRow").style.display = "none";
         document.getElementById("fieldReports").value = "";
-        document.getElementById("reportSelected").textContent = "No files selected.";
         document.getElementById("reportUploadStatus").textContent = "";
         uploadedReports = [];
+        selectedReportFiles = [];
+        renderReportFileList();
         sessionScreen.classList.remove("active");
         onboardScreen.classList.add("active");
       });
