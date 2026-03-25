@@ -321,8 +321,14 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
     session.turn_count += 1
     session.messages.append(ChatMessage(role=Role.user, content=request.transcript))
 
-    all_user_text = " ".join(m.content for m in session.messages if m.role == Role.user)
-    red_flags = detect_red_flags(all_user_text)
+    # After assessment is complete, only scan the current message for new red flags.
+    # Scanning accumulated history would permanently block post-assessment Q&A for any
+    # patient whose intake triggered a red flag (e.g. chest pain → every follow-up hijacked).
+    if session.assessment_complete:
+        red_flag_text = request.transcript
+    else:
+        red_flag_text = " ".join(m.content for m in session.messages if m.role == Role.user)
+    red_flags = detect_red_flags(red_flag_text)
 
     async def stream():
       try:
