@@ -174,13 +174,23 @@ Rules:
 - Keep the answer practical and concise (<= 170 words).
 - Do not invent new diagnoses beyond the completed triage summary.
 - If the user reports new emergency symptoms (chest pain, severe shortness of breath, stroke signs, active self-harm intent), tell them to seek emergency care now.
+- If the user asks about a specific lab value and it is not present in the uploaded reports, say you do not see it rather than guessing.
 - End with: "Do you have any other questions I can help with?"
 
 Return valid JSON only:
 {"reply": "your response here"}
 """
+    lab_block = ""
+    if session.patient_profile.lab_reports:
+        parts = []
+        for idx, report in enumerate(session.patient_profile.lab_reports[:3], start=1):
+            snippet = " ".join(report.content.split())[:1200]
+            parts.append(f"{idx}. {report.filename}: {snippet}")
+        lab_block = "\n\nUPLOADED LAB REPORTS:\n" + "\n".join(parts)
+
     context = (
-        f"TRIAGE SUMMARY:\n{session.post_assessment_summary}\n\n"
+        f"TRIAGE SUMMARY:\n{session.post_assessment_summary}"
+        f"{lab_block}\n\n"
         f"PATIENT QUESTION:\n{user_question}"
     )
     try:
