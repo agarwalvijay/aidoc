@@ -827,8 +827,9 @@
           <div class="form-section">
             <div class="form-section-title">Lab Reports <span style="color:#7aaacc;font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></div>
             <div class="form-group">
-              <label for="fieldReports">Upload recent reports (PDF or text)</label>
+              <label for="fieldReports">Upload one or more reports (PDF or text)</label>
               <input type="file" id="fieldReports" accept=".pdf,.txt,.csv" multiple />
+              <div id="reportSelected" style="margin-top:8px;color:#7aaacc;font-size:0.86rem;">No files selected.</div>
               <div id="reportUploadStatus" style="margin-top:8px;color:#9fc8e8;font-size:0.9rem;"></div>
             </div>
           </div>
@@ -1597,6 +1598,21 @@
         return await resp.json();
       }
 
+      document.getElementById("fieldReports").addEventListener("change", (e) => {
+        const files = [...(e.target.files || [])];
+        const selected = document.getElementById("reportSelected");
+        const status = document.getElementById("reportUploadStatus");
+        if (!files.length) {
+          selected.textContent = "No files selected.";
+          status.textContent = "";
+          return;
+        }
+        selected.textContent = files.length === 1
+          ? `Selected: ${files[0].name}`
+          : `Selected ${files.length} files: ${files.slice(0, 3).map(f => f.name).join(", ")}${files.length > 3 ? ", ..." : ""}`;
+        status.textContent = "Files selected. They will be processed when you begin consultation.";
+      });
+
       // ── Onboarding form submit ──
       document.getElementById("onboardForm").addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -1639,7 +1655,7 @@
 
         uploadedReports = [];
         if (reportFiles.length) {
-          reportStatus.textContent = "Extracting text from uploaded reports...";
+          reportStatus.textContent = "Processing uploaded reports...";
           for (const file of reportFiles) {
             try {
               const out = await extractReport(file);
@@ -1715,6 +1731,7 @@
         document.getElementById("fieldPregnant").value = "";
         document.getElementById("pregnantRow").style.display = "none";
         document.getElementById("fieldReports").value = "";
+        document.getElementById("reportSelected").textContent = "No files selected.";
         document.getElementById("reportUploadStatus").textContent = "";
         uploadedReports = [];
         sessionScreen.classList.remove("active");
