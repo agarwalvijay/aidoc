@@ -1,9 +1,10 @@
 import asyncio
+import io
 import json as _json
 import logging
 import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
@@ -121,6 +122,69 @@ def _sse(obj: dict) -> str:
     return f"data: {_json.dumps(obj)}\n\n"
 
 
+def _extract_pdf_text(content: bytes) -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=501,
+            detail="PDF extraction requires pypdf. Install with: pip install pypdf",
+        ) from exc
+
+    reader = PdfReader(io.BytesIO(content))
+    texts = []
+    for page in reader.pages:
+        page_text = page.extract_text() or ""
+        if page_text.strip():
+            texts.append(page_text)
+    return "\n".join(texts).strip()
+
+
+def _clean_report_text(text: str) -> str:
+    return " ".join((text or "").split()).strip()
+
+
+async def _answer_post_assessment_question(session, user_question: str) -> str:
+    llm = get_clinician_llm()
+    system = """You are a warm, clear clinician answering follow-up questions after triage.
+
+Rules:
+- Use plain language and a calm tone.
+- Keep the answer practical and concise (<= 170 words).
+- Do not invent new diagnoses beyond the completed triage summary.
+- If the user reports new emergency symptoms (chest pain, severe shortness of breath, stroke signs, active self-harm intent), tell them to seek emergency care now.
+- End with: "Do you have any other questions I can help with?"
+
+Return valid JSON only:
+{"reply": "your response here"}
+"""
+    context = (
+        f"TRIAGE SUMMARY:\n{session.post_assessment_summary}\n\n"
+        f"PATIENT QUESTION:\n{user_question}"
+    )
+    try:
+        raw = await asyncio.to_thread(
+            llm.invoke_raw,
+            system,
+            [{"role": "user", "content": context}],
+            450,
+        )
+        text = raw.strip()
+        if text.startswith("```"):
+            text = text.strip("`")
+        data = _json.loads(text)
+        reply = str(data.get("reply", "")).strip() if isinstance(data, dict) else ""
+        if reply:
+            return reply
+    except Exception as exc:
+        logger.error("[POST_QA_ERROR] session=%s error=%s", session.session_id, exc)
+
+    return (
+        "I understand. Based on your current triage summary, I recommend following the same next-step plan, "
+        "and seeking urgent care sooner if symptoms worsen. Do you have any other questions I can help with?"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -134,6 +198,34 @@ async def health() -> dict:
         "env": settings.app_env,
         "llm": get_llm_status(),
         "tts": settings.tts_provider if settings.tts_enabled else "web_speech",
+    }
+
+
+@app.post("/api/reports/extract")
+async def extract_report(file: UploadFile = File(...)) -> dict:
+    name = file.filename or "uploaded_report"
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    name_lower = name.lower()
+    is_pdf = name_lower.endswith(".pdf") or (file.content_type or "").lower() == "application/pdf"
+
+    if is_pdf:
+        raw_text = _extract_pdf_text(content)
+    else:
+        try:
+            raw_text = content.decode("utf-8", errors="ignore")
+        except Exception:
+            raw_text = ""
+
+    cleaned = _clean_report_text(raw_text)
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="Could not extract readable text from the report.")
+
+    return {
+        "filename": name,
+        "content": cleaned[:8000],
     }
 
 
@@ -215,6 +307,20 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
                 assistant_message=assistant_message,
                 ask_follow_up=False,
                 assessment=assessment,
+            )
+            yield _sse({"type": "result", "data": resp.model_dump()})
+            return
+
+        # ── Post-assessment follow-up Q&A mode ──
+        if session.assessment_complete:
+            yield _sse({"type": "progress", "stage": "thinking", "label": "Answering your follow-up question..."})
+            follow_up_answer = await _answer_post_assessment_question(session, request.transcript)
+            session.messages.append(ChatMessage(role=Role.assistant, content=follow_up_answer))
+            resp = TurnResponse(
+                session_id=session_id,
+                assistant_message=follow_up_answer,
+                ask_follow_up=True,
+                follow_up_question="Do you have any other questions I can help with?",
             )
             yield _sse({"type": "result", "data": resp.model_dump()})
             return
@@ -374,11 +480,23 @@ async def process_turn(session_id: str, request: TurnRequest) -> StreamingRespon
             assessment.likely_conditions,
         )
 
-        session.messages.append(ChatMessage(role=Role.assistant, content=assistant_message))
+        session.assessment_complete = True
+        session.post_assessment_summary = (
+            f"Urgency: {assessment.urgency}. "
+            f"Possible conditions: {', '.join(assessment.likely_conditions)}. "
+            f"Next step: {assessment.recommended_next_step}. "
+            f"Care instructions: {'; '.join(assessment.care_instructions[:3])}."
+        )
+        handoff = (
+            f"{assistant_message}\n\n"
+            "If you have any additional questions about this plan, feel free to ask and I can walk you through them."
+        )
+        session.messages.append(ChatMessage(role=Role.assistant, content=handoff))
         resp = TurnResponse(
             session_id=session_id,
-            assistant_message=assistant_message,
-            ask_follow_up=False,
+            assistant_message=handoff,
+            ask_follow_up=True,
+            follow_up_question="Do you have any additional questions?",
             assessment=assessment,
         )
         yield _sse({"type": "result", "data": resp.model_dump()})

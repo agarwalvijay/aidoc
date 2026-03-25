@@ -232,6 +232,12 @@ def _format_profile(profile: PatientProfile) -> str:
     else:
         lines.append("Vitals at intake: Not captured in registration — if the patient mentions vitals during the conversation, use those values")
 
+    if profile.lab_reports:
+        lines.append("Uploaded lab report excerpts:")
+        for idx, report in enumerate(profile.lab_reports[:3], start=1):
+            snippet = " ".join(report.content.split())[:1200]
+            lines.append(f"  {idx}. {report.filename}: {snippet}")
+
     return "\n".join(lines)
 
 

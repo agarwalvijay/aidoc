@@ -33,6 +33,11 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class LabReport(BaseModel):
+    filename: str
+    content: str = Field(..., min_length=1)
+
+
 class PatientProfile(BaseModel):
     name: Optional[str] = None
     age: Optional[int] = Field(None, ge=0, le=120)
@@ -49,6 +54,7 @@ class PatientProfile(BaseModel):
     diastolic_bp: Optional[int] = Field(None, ge=30, le=160)
     heart_rate: Optional[int] = Field(None, ge=20, le=300)
     spo2: Optional[int] = Field(None, ge=50, le=100)
+    lab_reports: List[LabReport] = Field(default_factory=list)
 
 
 class StartSessionRequest(BaseModel):
@@ -115,3 +121,5 @@ class SessionState(BaseModel):
     messages: List[ChatMessage] = Field(default_factory=list)
     turn_count: int = 0
     vitals: ClinicalVitals = Field(default_factory=ClinicalVitals)
+    assessment_complete: bool = False
+    post_assessment_summary: str = ""

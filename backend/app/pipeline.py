@@ -261,6 +261,12 @@ def _format_profile_block(profile: PatientProfile) -> str:
         flag = "  ⚠ LOW" if profile.spo2 < 95 else ""
         vitals.append(f"SpO2 {profile.spo2}%{flag}")
     lines.append(f"Vitals: {', '.join(vitals) if vitals else 'not captured at registration — check conversation transcript'}")
+
+    if profile.lab_reports:
+        lines.append("Uploaded lab report excerpts:")
+        for idx, report in enumerate(profile.lab_reports[:3], start=1):
+            snippet = " ".join(report.content.split())[:1200]
+            lines.append(f"{idx}. {report.filename}: {snippet}")
     return "\n".join(lines)
 
 

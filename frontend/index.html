@@ -824,6 +824,15 @@
             </div>
           </div>
 
+          <div class="form-section">
+            <div class="form-section-title">Lab Reports <span style="color:#7aaacc;font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></div>
+            <div class="form-group">
+              <label for="fieldReports">Upload recent reports (PDF or text)</label>
+              <input type="file" id="fieldReports" accept=".pdf,.txt,.csv" multiple />
+              <div id="reportUploadStatus" style="margin-top:8px;color:#9fc8e8;font-size:0.9rem;"></div>
+            </div>
+          </div>
+
           <div id="formError" class="form-error">Please fill in the required fields (Age and Sex).</div>
           <button type="submit" class="btn-submit" id="beginBtn">Begin Consultation</button>
         </form>
@@ -954,6 +963,7 @@
       let preferredVoice  = null;
       let lastAiText      = "";
       let heardResult     = false;
+      let uploadedReports = [];
 
       // ── TTS state ──
       // null = unknown, true = available, false = not available
@@ -1398,7 +1408,7 @@
           lastAiText = resultData.assistant_message || "";
           addLog("ai", lastAiText);
 
-          if (!resultData.ask_follow_up && resultData.assessment) {
+          if (resultData.assessment) {
             renderAssessment(resultData.assessment);
           }
 
@@ -1408,6 +1418,13 @@
             if (useTextMode) {
               setStatus("Type your response below.");
             } else {
+              scheduleListen(450);
+            }
+          } else if (resultData.assessment) {
+            if (useTextMode) {
+              setStatus("Assessment complete. You can ask follow-up questions below.");
+            } else {
+              setStatus("Assessment complete. You can ask follow-up questions.");
               scheduleListen(450);
             }
           } else {
@@ -1512,6 +1529,7 @@
         isListening     = false;
         useTextMode     = false;
         lastAiText      = "";
+        uploadedReports = [];
 
         // Update specialty label in header
         document.getElementById("specialtyLabel").textContent =
@@ -1565,6 +1583,20 @@
         }
       }
 
+      async function extractReport(file) {
+        const body = new FormData();
+        body.append("file", file);
+        const resp = await fetch(`${API}/api/reports/extract`, {
+          method: "POST",
+          body,
+        });
+        if (!resp.ok) {
+          const msg = await resp.text();
+          throw new Error(msg || `Upload failed (${resp.status})`);
+        }
+        return await resp.json();
+      }
+
       // ── Onboarding form submit ──
       document.getElementById("onboardForm").addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -1601,6 +1633,32 @@
         const diastoVal   = parseInt(document.getElementById("fieldDiastolic").value, 10);
         const hrVal       = parseInt(document.getElementById("fieldHR").value, 10);
         const spo2Val     = parseInt(document.getElementById("fieldSpO2").value, 10);
+        const reportInput = document.getElementById("fieldReports");
+        const reportFiles = [...(reportInput.files || [])];
+        const reportStatus = document.getElementById("reportUploadStatus");
+
+        uploadedReports = [];
+        if (reportFiles.length) {
+          reportStatus.textContent = "Extracting text from uploaded reports...";
+          for (const file of reportFiles) {
+            try {
+              const out = await extractReport(file);
+              if (out && out.content) {
+                uploadedReports.push({
+                  filename: out.filename || file.name,
+                  content: out.content,
+                });
+              }
+            } catch (err) {
+              console.error("report extraction failed", err);
+            }
+          }
+          reportStatus.textContent = uploadedReports.length
+            ? `Processed ${uploadedReports.length} report(s).`
+            : "Could not extract text from uploaded files.";
+        } else {
+          reportStatus.textContent = "";
+        }
 
         const profile = {
           name, age, sex, pregnant,
@@ -1614,6 +1672,7 @@
           diastolic_bp:   (!isNaN(diastoVal)    && diastoVal >= 30    && diastoVal <= 160)   ? diastoVal    : null,
           heart_rate:     (!isNaN(hrVal)        && hrVal >= 20        && hrVal <= 300)        ? hrVal        : null,
           spo2:           (!isNaN(spo2Val)      && spo2Val >= 50      && spo2Val <= 100)      ? spo2Val      : null,
+          lab_reports: uploadedReports,
         };
 
         document.getElementById("beginBtn").disabled = true;
@@ -1655,6 +1714,9 @@
         // Reset pregnancy field — sex selection may differ next session
         document.getElementById("fieldPregnant").value = "";
         document.getElementById("pregnantRow").style.display = "none";
+        document.getElementById("fieldReports").value = "";
+        document.getElementById("reportUploadStatus").textContent = "";
+        uploadedReports = [];
         sessionScreen.classList.remove("active");
         onboardScreen.classList.add("active");
       });
